@@ -1,0 +1,27 @@
+from flask import request, jsonify
+from .storage import save_metric, get_latest
+
+def register_routes(app):
+
+    @app.route("/metrics", methods=["POST"])
+    def metrics():
+        data = request.get_json()
+
+        required = ["device_id", "temperature", "humidity", "ts"]
+        if not all(k in data for k in required):
+            return {"error": "invalid payload"}, 400
+
+        save_metric(data)
+
+        return {"status": "ok"}, 200
+
+
+    @app.route("/latest")
+    def latest():
+        device_id = request.args.get("device_id")
+        result = get_latest(device_id)
+
+        if not result:
+            return {"error": "not found"}, 404
+
+        return jsonify(result)
