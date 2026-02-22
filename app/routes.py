@@ -15,16 +15,17 @@ def register_routes(app):
 
         return {"status": "ok"}, 200
 
-
-    @app.route("/latest")
+    @app.route("/latest", methods=["GET"])
     def latest():
         device_id = request.args.get("device_id")
-        result = get_latest(device_id)
+        if not device_id:
+            return {"error": "device_id required"}, 400
 
+        result = get_latest(device_id)
         if not result:
             return {"error": "not found"}, 404
 
-        return jsonify(result)
+        return jsonify(result), 200
     
     @app.route("/")
     def root():
