@@ -25,3 +25,11 @@ def register_routes(app):
             return {"error": "not found"}, 404
 
         return jsonify(result)
+    
+    @app.route("/")
+    def root():
+        return {"service": "telemetry-api"}, 200
+
+    @app.route("/health")
+    def health():
+        return {"status": "healthy"}, 200

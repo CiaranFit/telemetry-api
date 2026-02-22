@@ -8,6 +8,6 @@ def create_app():
 
     configure_logging()
     init_db()
-    register_routes()
+    register_routes(app)
 
     return app
