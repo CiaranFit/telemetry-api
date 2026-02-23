@@ -41,7 +41,7 @@ def register_routes(app):
 
         try:
             payload = {
-                "device_id": str(data["device_id"]),
+                "device_id": str(data["device_id"]).strip(),
                 "temperature": float(data["temperature"]),
                 "humidity": float(data["humidity"]),
                 "ts": int(data["ts"]),
@@ -53,9 +53,17 @@ def register_routes(app):
                 "remote_addr": request.remote_addr,
             }})
             return {"error": "invalid field types"}, 400
-
-        save_metric(payload)
-
+        
+        try:
+            save_metric(payload)
+        except Exception:
+            logger.exception("metric_db_write_failed", extra={"fields": {
+                "event": "metric_db_write_failed",
+                "device_id": payload.get("device_id"),
+                "remote_addr": request.remote_addr,
+            }})
+            return {"error": "server_error"}, 500
+        
         latency_ms = int((time.time() - start) * 1000)
         logger.info("metric_ingested", extra={"fields": {
             "event": "metric_ingested",
