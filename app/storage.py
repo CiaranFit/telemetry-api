@@ -32,25 +32,25 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     with db() as conn:
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS metrics (
-                device_id TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS readings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL,
                 temperature REAL NOT NULL,
                 humidity REAL NOT NULL,
                 ts INTEGER NOT NULL
             )
         """)
-        mode = conn.execute("PRAGMA journal_mode;").fetchone()[0]
+
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_readings_device_ts
+            ON readings(device_id, ts)
+        """)
 
 def save_metric(data):
     with db() as conn:
         conn.execute("""
-            INSERT INTO metrics (device_id, temperature, humidity, ts)
+            INSERT INTO readings (device_id, temperature, humidity, ts)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(device_id)
-            DO UPDATE SET
-                temperature=excluded.temperature,
-                humidity=excluded.humidity,
-                ts=excluded.ts
         """, (
             data["device_id"],
             data["temperature"],
@@ -60,10 +60,13 @@ def save_metric(data):
 
 def get_latest(device_id):
     with db() as conn:
-        cur = conn.execute(
-            "SELECT device_id, temperature, humidity, ts FROM metrics WHERE device_id = ?",
-            (device_id,)
-        )
+        cur = conn.execute("""
+            SELECT device_id, temperature, humidity, ts
+            FROM readings
+            WHERE device_id = ?
+            ORDER BY ts DESC
+            LIMIT 1
+        """, (device_id,))
         row = cur.fetchone()
 
     if row:
