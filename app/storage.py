@@ -77,3 +77,39 @@ def get_latest(device_id):
             "ts": row[3]
         }
     return None
+
+def list_devices():
+    with db() as conn:
+        rows = conn.execute("""
+            SELECT DISTINCT device_id
+            FROM readings
+            ORDER BY device_id ASC
+        """).fetchall()
+    return [r[0] for r in rows]
+
+
+def get_history(device_id: str, since_ts: int, limit: int = 5000):
+    with db() as conn:
+        rows = conn.execute("""
+            SELECT temperature, humidity, ts
+            FROM readings
+            WHERE device_id = ?
+              AND ts >= ?
+            ORDER BY ts ASC
+            LIMIT ?
+        """, (device_id, since_ts, limit)).fetchall()
+
+    return [{"temperature": r[0], "humidity": r[1], "ts": r[2]} for r in rows]
+
+def get_latest_points(device_id: str, limit: int = 2000):
+    with db() as conn:
+        rows = conn.execute("""
+            SELECT temperature, humidity, ts
+            FROM readings
+            WHERE device_id = ?
+            ORDER BY ts DESC
+            LIMIT ?
+        """, (device_id, limit)).fetchall()
+
+    rows.reverse()  # return ASC for charting
+    return [{"temperature": r[0], "humidity": r[1], "ts": r[2]} for r in rows]

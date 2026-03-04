@@ -1,8 +1,7 @@
 import logging
 import time
 from flask import request, jsonify
-from .storage import save_metric, get_latest
-
+from .storage import save_metric, get_latest, list_devices, get_history, get_latest_points
 logger = logging.getLogger("telemetry")
 
 def register_routes(app):
@@ -46,6 +45,7 @@ def register_routes(app):
                 "humidity": float(data["humidity"]),
                 "ts": int(data["ts"]),
             }
+            payload["ts"] = int(time.time())
         except (TypeError, ValueError):
             logger.warning("metric_rejected", extra={"fields": {
                 "event": "metric_rejected",
@@ -103,3 +103,44 @@ def register_routes(app):
             "remote_addr": request.remote_addr,
         }})
         return jsonify(result), 200
+    
+    @app.route("/devices", methods=["GET"])
+    def devices():
+        return jsonify({"devices": list_devices()}), 200
+
+    @app.route("/history", methods=["GET"])
+    def history():
+        device_id = request.args.get("device_id")
+        minutes = request.args.get("minutes", "60")
+        limit = request.args.get("limit", "2000")
+        mode = request.args.get("mode", "time")
+
+        if not device_id:
+            return {"error": "device_id required"}, 400
+
+        try:
+            minutes = int(minutes)
+            limit = int(limit)
+        except ValueError:
+            return {"error": "minutes and limit must be integers"}, 400
+
+        if limit < 10 or limit > 20000:
+            return {"error": "limit must be between 10 and 20000"}, 400
+
+        if mode == "latest":
+            points = get_latest_points(device_id, limit=limit)
+            return jsonify({"device_id": device_id, "mode": "latest", "points": points}), 200
+
+        # default: mode == "time"
+        if minutes < 1 or minutes > (24 * 60):
+            return {"error": "minutes must be between 1 and 1440"}, 400
+
+        since_ts = int(time.time()) - minutes * 60
+        points = get_history(device_id, since_ts, limit=limit)
+
+        return jsonify({
+            "device_id": device_id,
+            "mode": "time",
+            "since_ts": since_ts,
+            "points": points
+        }), 200
