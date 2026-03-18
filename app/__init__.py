@@ -7,12 +7,11 @@ from .storage import init_db
 
 def create_app():
     app = Flask(__name__)
+
     CORS(app)
-    register_routes(app)
 
     configure_logging(Config.LOG_LEVEL)
     init_db()
-
     register_routes(app)
 
     return app
