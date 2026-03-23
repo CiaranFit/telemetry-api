@@ -1,5 +1,5 @@
 const POLL_MS = 30000;
-const MAX_POINTS = (4 * 60 * 60) / (POLL_MS / 1000);
+const WINDOW_MS = 4 * 60 * 60 * 1000;
 const history = [];
 
 let apiBase = localStorage.getItem('telemetry-api-base') || 'http://192.168.1.7:8000';
@@ -14,7 +14,9 @@ const lastSeen = document.getElementById('last-seen');
 apiInput.value = apiBase;
 deviceInput.value = deviceId;
 
-document.getElementById('apply-btn').addEventListener('click', () => {
+let pollHandle = null;
+
+document.getElementById('apply-btn').addEventListener('click', async () => {
   apiBase = apiInput.value.trim().replace(/\/$/, '');
   deviceId = deviceInput.value.trim();
 
@@ -23,7 +25,8 @@ document.getElementById('apply-btn').addEventListener('click', () => {
 
   history.length = 0;
   updateCharts();
-  fetchLatest();
+
+  await initialiseDashboard();
 });
 
 const chartDefaults = {
@@ -125,6 +128,67 @@ function updateTile(valId, subId, value, unit, low, high, type) {
   sub.textContent = tag;
 }
 
+function normaliseRecord(row) {
+  const temp = parseFloat(row.temperature ?? row.temp ?? row.Temperature);
+  const humid = parseFloat(row.humidity ?? row.hum ?? row.Humidity);
+  const tsRaw = row.ts ?? row.timestamp ?? row.time;
+
+  const ts = parseTimestamp(tsRaw);
+
+  if (Number.isNaN(temp) || Number.isNaN(humid) || Number.isNaN(ts.getTime())) {
+    return null;
+  }
+
+  return {
+    ts,
+    temperature: temp,
+    humidity: humid
+  };
+}
+
+function trimHistoryWindow() {
+  const cutoff = Date.now() - WINDOW_MS;
+
+  while (history.length && history[0].ts.getTime() < cutoff) {
+    history.shift();
+  }
+}
+
+function sortHistory() {
+  history.sort((a, b) => a.ts - b.ts);
+}
+
+function dedupeHistory() {
+  const deduped = [];
+  const seen = new Set();
+
+  for (const point of history) {
+    const key = point.ts.getTime();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(point);
+    }
+  }
+
+  history.length = 0;
+  history.push(...deduped);
+}
+
+function addOrReplacePoint(point) {
+  const tsMs = point.ts.getTime();
+  const existingIndex = history.findIndex(p => p.ts.getTime() === tsMs);
+
+  if (existingIndex >= 0) {
+    history[existingIndex] = point;
+  } else {
+    history.push(point);
+  }
+
+  sortHistory();
+  dedupeHistory();
+  trimHistoryWindow();
+}
+
 function updateCharts() {
   const labels = history.map(r =>
     r.ts.toLocaleTimeString('en-GB', {
@@ -145,16 +209,81 @@ function updateCharts() {
   document.getElementById('nd-temp').style.display = pts > 1 ? 'none' : 'flex';
   document.getElementById('nd-humid').style.display = pts > 1 ? 'none' : 'flex';
 
-  const ago = pts > 1 ? `${timeSince(history[0].ts)} ago → now` : 'collecting…';
-  document.getElementById('chart-t-meta').textContent = ago;
-  document.getElementById('chart-h-meta').textContent = ago;
+  let meta = 'collecting…';
+  if (pts > 1) {
+    const first = history[0].ts;
+    const last = history[history.length - 1].ts;
+    meta =
+      `${first.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` +
+      ` → ` +
+      `${last.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` +
+      ` · ${pts} pts`;
+  }
+
+  document.getElementById('chart-t-meta').textContent = meta;
+  document.getElementById('chart-h-meta').textContent = meta;
 }
 
-function timeSince(date) {
-  const sec = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (sec < 60) return `${sec}s`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+async function fetchHistory() {
+  if (!apiBase || !deviceId) {
+    setStatus('err', 'ERROR', 'Missing API base or device ID');
+    return;
+  }
+
+  setStatus('init', 'LOADING', '4hr history');
+
+  const url = `${apiBase}/history?device_id=${encodeURIComponent(deviceId)}&minutes=240&mode=time`;
+  const res = await fetch(url);
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+
+  let rows = [];
+
+  if (Array.isArray(data)) {
+    rows = data;
+  } else if (Array.isArray(data.history)) {
+    rows = data.history;
+  } else if (Array.isArray(data.records)) {
+    rows = data.records;
+  } else if (Array.isArray(data.data)) {
+    rows = data.data;
+  } else {
+    throw new Error('History response format not recognised');
+  }
+
+  history.length = 0;
+
+  for (const row of rows) {
+    const point = normaliseRecord(row);
+    if (point) history.push(point);
+  }
+
+  sortHistory();
+  dedupeHistory();
+  trimHistoryWindow();
+  updateCharts();
+
+  if (history.length > 0) {
+    const latest = history[history.length - 1];
+
+    updateTile('val-temp', 'sub-temp', latest.temperature, '°C', 18, 25, 'temp');
+    updateTile('val-humid', 'sub-humid', latest.humidity, '%', 40, 60, 'humid');
+
+    setStatus(
+      'ok',
+      'LIVE',
+      latest.ts.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    );
+  } else {
+    setStatus('init', 'LIVE', 'no history yet');
+  }
 }
 
 async function fetchLatest() {
@@ -168,48 +297,52 @@ async function fetchLatest() {
     const res = await fetch(url);
     const data = await res.json();
 
-    console.log('API response:', data);
-
     if (!res.ok) {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
 
-    const temp = parseFloat(data.temperature ?? data.temp ?? data.Temperature);
-    const humid = parseFloat(data.humidity ?? data.hum ?? data.Humidity);
-    const rawTs = data.ts ?? data.timestamp ?? data.time ?? new Date().toISOString();
-    const parsedTs = parseTimestamp(rawTs);
+    const point = normaliseRecord(data);
 
-    if (Number.isNaN(temp)) throw new Error('Temperature missing in API response');
-    if (Number.isNaN(humid)) throw new Error('Humidity missing in API response');
-    if (Number.isNaN(parsedTs.getTime())) throw new Error('Timestamp invalid in API response');
+    if (!point) {
+      throw new Error('Latest response missing temperature, humidity or timestamp');
+    }
+
+    updateTile('val-temp', 'sub-temp', point.temperature, '°C', 18, 25, 'temp');
+    updateTile('val-humid', 'sub-humid', point.humidity, '%', 40, 60, 'humid');
+
+    addOrReplacePoint(point);
+    updateCharts();
 
     setStatus(
       'ok',
       'LIVE',
-      parsedTs.toLocaleTimeString('en-GB', {
+      point.ts.toLocaleTimeString('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
       })
     );
-
-    updateTile('val-temp', 'sub-temp', temp, '°C', 18, 25, 'temp');
-    updateTile('val-humid', 'sub-humid', humid, '%', 40, 60, 'humid');
-
-    history.push({
-      ts: parsedTs,
-      temperature: temp,
-      humidity: humid
-    });
-
-    if (history.length > MAX_POINTS) history.shift();
-
-    updateCharts();
   } catch (err) {
-    console.error('Fetch failed:', err);
+    console.error('Fetch latest failed:', err);
     setStatus('err', 'ERROR', err.message);
   }
 }
 
-fetchLatest();
-setInterval(fetchLatest, POLL_MS);
+async function initialiseDashboard() {
+  try {
+    if (pollHandle) {
+      clearInterval(pollHandle);
+      pollHandle = null;
+    }
+
+    await fetchHistory();
+    await fetchLatest();
+
+    pollHandle = setInterval(fetchLatest, POLL_MS);
+  } catch (err) {
+    console.error('Initialisation failed:', err);
+    setStatus('err', 'ERROR', err.message);
+  }
+}
+
+initialiseDashboard();
