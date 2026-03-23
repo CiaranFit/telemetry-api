@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sensor Dashboard</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header>
+    <div class="logo"><span>◈</span>TELEMETRY / SENSOR DASHBOARD</div>
+    <div id="status-bar">
+      <div id="status-dot" class="init"></div>
+      <span id="status-text">CONNECTING</span>
+      <span id="last-seen"></span>
+    </div>
+  </header>
+
+  <div id="config-bar">
+    <label for="api-url-input">API BASE ▸</label>
+    <input id="api-url-input" type="text" value="http://192.168.1.7:8000" spellcheck="false" />
+
+    <label for="device-id-input">DEVICE ▸</label>
+    <input id="device-id-input" type="text" value="Test_01" spellcheck="false" />
+
+    <button id="apply-btn">APPLY</button>
+  </div>
+
+  <div class="grid row-2" style="margin-bottom:16px;">
+    <div class="tile tile-temp">
+      <div class="tile-label">Temperature</div>
+      <div class="tile-value" id="val-temp">--<span class="tile-unit">°C</span></div>
+      <div class="tile-sub">
+        <span class="badge" id="sub-temp">waiting for data</span>
+      </div>
+    </div>
+
+    <div class="tile tile-humid">
+      <div class="tile-label">Humidity</div>
+      <div class="tile-value" id="val-humid">--<span class="tile-unit">%</span></div>
+      <div class="tile-sub">
+        <span class="badge" id="sub-humid">waiting for data</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid row-1" style="margin-bottom:16px;">
+    <div class="tile tile-chart-t">
+      <div class="chart-header">
+        <span class="chart-title">Temperature / 4hr window</span>
+        <span class="chart-meta" id="chart-t-meta">building history…</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-temp"></canvas>
+        <div class="no-data" id="nd-temp">ACCUMULATING DATA…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid row-1">
+    <div class="tile tile-chart-h">
+      <div class="chart-header">
+        <span class="chart-title">Humidity / 4hr window</span>
+        <span class="chart-meta" id="chart-h-meta">building history…</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-humid"></canvas>
+        <div class="no-data" id="nd-humid">ACCUMULATING DATA…</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
