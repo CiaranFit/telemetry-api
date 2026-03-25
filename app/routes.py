@@ -1,7 +1,7 @@
 import logging
 import time
 from pathlib import Path
-from flask import request, jsonify, send_from_directory
+from flask import request, jsonify, send_from_directory, redirect
 from .storage import save_metric, get_latest, list_devices, get_history, get_latest_points
 
 logger = logging.getLogger("telemetry")
@@ -13,6 +13,14 @@ def register_routes(app):
 
     @app.route("/", methods=["GET"])
     def dashboard_index():
+        return redirect("/dashboard/")
+
+    @app.route("/dashboard", methods=["GET"])
+    def dashboard_root_redirect():
+        return redirect("/dashboard/")
+
+    @app.route("/dashboard/", methods=["GET"])
+    def dashboard_root():
         return send_from_directory(DASHBOARD_DIR, "index.html")
 
     @app.route("/dashboard/<path:filename>", methods=["GET"])

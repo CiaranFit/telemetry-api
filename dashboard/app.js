@@ -59,7 +59,15 @@ const chartDefaults = {
 };
 
 function makeChart(canvasId, color) {
-  const ctx = document.getElementById(canvasId).getContext("2d");
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === "undefined") {
+    return {
+      data: { labels: [], datasets: [{ data: [] }] },
+      update() {}
+    };
+  }
+
+  const ctx = canvas.getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 180);
   grad.addColorStop(0, color + "33");
   grad.addColorStop(1, color + "00");
@@ -87,6 +95,28 @@ function parseTimestamp(ts) {
   if (typeof ts === "number") return new Date(ts * 1000);
   if (typeof ts === "string" && /^\d+$/.test(ts)) return new Date(Number(ts) * 1000);
   return new Date(ts);
+}
+
+function formatStatusTimestamp(ts) {
+  const ageMs = Date.now() - ts.getTime();
+  const isStale = ageMs > 24 * 60 * 60 * 1000;
+
+  if (isStale) {
+    return ts.toLocaleString("en-GB", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+  }
+
+  return ts.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 }
 
 function setStatus(state, text, detail = "") {
@@ -316,11 +346,7 @@ async function fetchHistory() {
     setStatus(
       "ok",
       "LIVE",
-      latest.ts.toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      })
+      formatStatusTimestamp(latest.ts)
     );
   } else {
     setStatus("init", "LIVE", "no history yet");
@@ -353,11 +379,7 @@ async function fetchLatest() {
     setStatus(
       "ok",
       "LIVE",
-      point.ts.toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      })
+      formatStatusTimestamp(point.ts)
     );
   } catch (err) {
     console.error("Fetch latest failed:", err);
