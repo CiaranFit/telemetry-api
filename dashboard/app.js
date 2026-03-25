@@ -1,7 +1,9 @@
 const POLL_MS = 30000;
-const API_BASE = window.location.origin.startsWith("http")
+const savedApiBase = localStorage.getItem("telemetry-api-base") || "";
+const defaultApiBase = window.location.origin.startsWith("http") && window.location.port === "8000"
   ? window.location.origin
   : "http://localhost:8000";
+const API_BASE = savedApiBase || defaultApiBase;
 
 const history = [];
 let selectedHours = Number(localStorage.getItem("telemetry-window-hours")) || 4;
@@ -117,6 +119,36 @@ function formatStatusTimestamp(ts) {
     minute: "2-digit",
     second: "2-digit"
   });
+}
+
+function setDeviceSelectState(label, { disabled = true, value = "" } = {}) {
+  deviceSelect.innerHTML = "";
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = label;
+  deviceSelect.appendChild(opt);
+  deviceSelect.value = value;
+  deviceSelect.disabled = disabled;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  const text = await res.text();
+
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Invalid JSON from ${url}`);
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+
+  return data;
 }
 
 function setStatus(state, text, detail = "") {
@@ -275,15 +307,11 @@ function updateCharts() {
 }
 
 async function fetchDevices() {
-  const res = await fetch(`${API_BASE}/devices`);
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-
+  setDeviceSelectState("Loading devices...");
+  const data = await fetchJson(`${API_BASE}/devices`);
   const devices = Array.isArray(data.devices) ? data.devices : [];
   deviceSelect.innerHTML = "";
+  deviceSelect.disabled = false;
 
   for (const dev of devices) {
     const opt = document.createElement("option");
@@ -293,10 +321,7 @@ async function fetchDevices() {
   }
 
   if (!devices.length) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "No devices found";
-    deviceSelect.appendChild(opt);
+    setDeviceSelectState("No devices found");
     deviceId = "";
     return;
   }
@@ -319,12 +344,7 @@ async function fetchHistory() {
 
   const minutes = selectedHours * 60;
   const url = `${API_BASE}/history?device_id=${encodeURIComponent(deviceId)}&minutes=${minutes}&mode=time`;
-  const res = await fetch(url);
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
+  const data = await fetchJson(url);
 
   const rows = Array.isArray(data.history) ? data.history : [];
   history.length = 0;
@@ -358,12 +378,7 @@ async function fetchLatest() {
 
   try {
     const url = `${API_BASE}/latest?device_id=${encodeURIComponent(deviceId)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || `HTTP ${res.status}`);
-    }
+    const data = await fetchJson(url);
 
     const point = normaliseRecord(data);
     if (!point) {
@@ -389,13 +404,7 @@ async function fetchLatest() {
 
 async function fetchWeatherToday() {
   try {
-    const res = await fetch(`${API_BASE}/weather/today`);
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || `HTTP ${res.status}`);
-    }
-
+    const data = await fetchJson(`${API_BASE}/weather/today`);
     updateWeatherTile(data);
   } catch (err) {
     console.error("Weather fetch failed:", err);
@@ -419,6 +428,7 @@ async function initialiseDashboard() {
     pollHandle = setInterval(fetchLatest, POLL_MS);
   } catch (err) {
     console.error("Initialisation failed:", err);
+    setDeviceSelectState("API unavailable");
     setStatus("err", "ERROR", err.message);
   }
 }
@@ -443,4 +453,5 @@ for (const btn of windowButtons) {
   });
 }
 
+setDeviceSelectState("Loading devices...");
 initialiseDashboard();
