@@ -1,9 +1,6 @@
 const POLL_MS = 30000;
 const savedApiBase = localStorage.getItem("telemetry-api-base") || "";
-const defaultApiBase = window.location.origin.startsWith("http") && window.location.port === "8000"
-  ? window.location.origin
-  : "http://localhost:8000";
-const API_BASE = savedApiBase || defaultApiBase;
+let apiBase = savedApiBase || "";
 
 const history = [];
 let selectedHours = Number(localStorage.getItem("telemetry-window-hours")) || 4;
@@ -151,10 +148,73 @@ async function fetchJson(url) {
   return data;
 }
 
+function getApiCandidates() {
+  const candidates = [];
+  const origin = window.location.origin;
+  const host = window.location.hostname;
+  const protocol = window.location.protocol || "http:";
+
+  if (savedApiBase) candidates.push(savedApiBase);
+  if (window.location.port === "8000" && origin.startsWith("http")) candidates.push(origin);
+  if (host) candidates.push(`${protocol}//${host}:8000`);
+  if (origin.startsWith("http")) candidates.push(origin);
+  candidates.push("http://localhost:8000");
+  candidates.push("http://127.0.0.1:8000");
+
+  return [...new Set(candidates)];
+}
+
+async function probeApiBase(candidate) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const res = await fetch(`${candidate}/health`, {
+      signal: controller.signal
+    });
+    if (!res.ok) return false;
+
+    const text = await res.text();
+    if (!text) return false;
+
+    try {
+      const data = JSON.parse(text);
+      return data.status === "healthy";
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function resolveApiBase() {
+  const candidates = getApiCandidates();
+
+  for (const candidate of candidates) {
+    if (await probeApiBase(candidate)) {
+      apiBase = candidate;
+      localStorage.setItem("telemetry-api-base", apiBase);
+      return apiBase;
+    }
+  }
+
+  throw new Error(`Unable to reach API. Tried: ${candidates.join(", ")}`);
+}
+
 function setStatus(state, text, detail = "") {
   statusDot.className = state;
   statusText.textContent = text;
   lastSeen.textContent = detail ? `· ${detail}` : "";
+}
+
+function setControlsEnabled(enabled) {
+  deviceSelect.disabled = !enabled;
+  for (const btn of windowButtons) {
+    btn.disabled = !enabled;
+  }
 }
 
 function setWindowButtons() {
@@ -308,7 +368,8 @@ function updateCharts() {
 
 async function fetchDevices() {
   setDeviceSelectState("Loading devices...");
-  const data = await fetchJson(`${API_BASE}/devices`);
+  setControlsEnabled(false);
+  const data = await fetchJson(`${apiBase}/devices`);
   const devices = Array.isArray(data.devices) ? data.devices : [];
   deviceSelect.innerHTML = "";
   deviceSelect.disabled = false;
@@ -332,6 +393,7 @@ async function fetchDevices() {
   }
 
   deviceSelect.value = deviceId;
+  setControlsEnabled(true);
 }
 
 async function fetchHistory() {
@@ -343,7 +405,7 @@ async function fetchHistory() {
   setStatus("init", "LOADING", `${selectedHours}hr history`);
 
   const minutes = selectedHours * 60;
-  const url = `${API_BASE}/history?device_id=${encodeURIComponent(deviceId)}&minutes=${minutes}&mode=time`;
+  const url = `${apiBase}/history?device_id=${encodeURIComponent(deviceId)}&minutes=${minutes}&mode=time`;
   const data = await fetchJson(url);
 
   const rows = Array.isArray(data.history) ? data.history : [];
@@ -377,7 +439,7 @@ async function fetchLatest() {
   if (!deviceId) return;
 
   try {
-    const url = `${API_BASE}/latest?device_id=${encodeURIComponent(deviceId)}`;
+    const url = `${apiBase}/latest?device_id=${encodeURIComponent(deviceId)}`;
     const data = await fetchJson(url);
 
     const point = normaliseRecord(data);
@@ -404,7 +466,7 @@ async function fetchLatest() {
 
 async function fetchWeatherToday() {
   try {
-    const data = await fetchJson(`${API_BASE}/weather/today`);
+    const data = await fetchJson(`${apiBase}/weather/today`);
     updateWeatherTile(data);
   } catch (err) {
     console.error("Weather fetch failed:", err);
@@ -419,6 +481,8 @@ async function initialiseDashboard() {
       pollHandle = null;
     }
 
+    setStatus("init", "CONNECTING", "probing API");
+    await resolveApiBase();
     setWindowButtons();
     await fetchDevices();
     await fetchHistory();
@@ -429,6 +493,7 @@ async function initialiseDashboard() {
   } catch (err) {
     console.error("Initialisation failed:", err);
     setDeviceSelectState("API unavailable");
+    setControlsEnabled(false);
     setStatus("err", "ERROR", err.message);
   }
 }
