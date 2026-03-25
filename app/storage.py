@@ -105,11 +105,15 @@ def get_history(device_id: str, since_ts: int, limit: int = 5000):
     with db() as conn:
         rows = conn.execute("""
             SELECT device_id, temperature, humidity, ts
-            FROM readings
-            WHERE device_id = ?
-              AND ts >= ?
+            FROM (
+                SELECT device_id, temperature, humidity, ts
+                FROM readings
+                WHERE device_id = ?
+                  AND ts >= ?
+                ORDER BY ts DESC
+                LIMIT ?
+            ) recent
             ORDER BY ts ASC
-            LIMIT ?
         """, (device_id, since_ts, limit)).fetchall()
 
     return [

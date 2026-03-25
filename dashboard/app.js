@@ -351,10 +351,6 @@ function trimHistoryWindow() {
   while (history.length && history[0].ts.getTime() < cutoff) {
     history.shift();
   }
-
-  const sampled = downsamplePoints(history, MAX_HISTORY_POINTS);
-  history.length = 0;
-  history.push(...sampled);
 }
 
 function addOrReplacePoint(point) {
@@ -390,9 +386,10 @@ function setYAxisRange(chart, values, padding) {
 }
 
 function updateCharts() {
-  const labels = history.map(r => formatChartLabel(r.ts));
-  const tempValues = history.map(r => r.temperature);
-  const humidValues = history.map(r => r.humidity);
+  const chartPoints = downsamplePoints(history, MAX_HISTORY_POINTS);
+  const labels = chartPoints.map(r => formatChartLabel(r.ts));
+  const tempValues = chartPoints.map(r => r.temperature);
+  const humidValues = chartPoints.map(r => r.humidity);
 
   chartTemp.data.labels = labels;
   chartTemp.data.datasets[0].data = tempValues;
@@ -417,6 +414,8 @@ function updateCharts() {
       ` → ` +
       `${formatChartLabel(last)}` +
       ` · ${pts} pts`;
+  } else if (pts === 1) {
+    meta = `${formatChartLabel(history[0].ts)} · 1 pt`;
   }
 
   document.getElementById("chart-t-meta").textContent = meta;
