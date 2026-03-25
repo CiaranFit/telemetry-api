@@ -1,4 +1,5 @@
 const POLL_MS = 30000;
+const MAX_HISTORY_POINTS = 480;
 const savedApiBase = localStorage.getItem("telemetry-api-base") || "";
 let apiBase = savedApiBase || "";
 
@@ -227,7 +228,7 @@ function setWindowButtons() {
 }
 
 function getHistoryLimit() {
-  return Math.min(20000, Math.max(600, selectedHours * 180));
+  return Math.min(5000, Math.max(MAX_HISTORY_POINTS, selectedHours * 180));
 }
 
 function formatChartLabel(ts) {
@@ -329,11 +330,31 @@ function dedupeHistory() {
   history.push(...deduped);
 }
 
+function downsamplePoints(points, maxPoints) {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+
+  const sampled = [];
+  const lastIndex = points.length - 1;
+
+  for (let i = 0; i < maxPoints; i += 1) {
+    const index = Math.round((i * lastIndex) / (maxPoints - 1));
+    sampled.push(points[index]);
+  }
+
+  return sampled;
+}
+
 function trimHistoryWindow() {
   const cutoff = Date.now() - selectedHours * 60 * 60 * 1000;
   while (history.length && history[0].ts.getTime() < cutoff) {
     history.shift();
   }
+
+  const sampled = downsamplePoints(history, MAX_HISTORY_POINTS);
+  history.length = 0;
+  history.push(...sampled);
 }
 
 function addOrReplacePoint(point) {
