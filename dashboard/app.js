@@ -372,20 +372,41 @@ function addOrReplacePoint(point) {
   trimHistoryWindow();
 }
 
+function setYAxisRange(chart, values, padding) {
+  if (!chart.options || !chart.options.scales || !chart.options.scales.y) {
+    return;
+  }
+
+  if (!values.length) {
+    delete chart.options.scales.y.min;
+    delete chart.options.scales.y.max;
+    return;
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  chart.options.scales.y.min = Math.floor(min - padding);
+  chart.options.scales.y.max = Math.ceil(max + padding);
+}
+
 function updateCharts() {
   const labels = history.map(r => formatChartLabel(r.ts));
+  const tempValues = history.map(r => r.temperature);
+  const humidValues = history.map(r => r.humidity);
 
   chartTemp.data.labels = labels;
-  chartTemp.data.datasets[0].data = history.map(r => r.temperature);
+  chartTemp.data.datasets[0].data = tempValues;
+  setYAxisRange(chartTemp, tempValues, 2);
   chartTemp.update();
 
   chartHumid.data.labels = labels;
-  chartHumid.data.datasets[0].data = history.map(r => r.humidity);
+  chartHumid.data.datasets[0].data = humidValues;
+  setYAxisRange(chartHumid, humidValues, 5);
   chartHumid.update();
 
   const pts = history.length;
-  document.getElementById("nd-temp").style.display = pts > 1 ? "none" : "flex";
-  document.getElementById("nd-humid").style.display = pts > 1 ? "none" : "flex";
+  document.getElementById("nd-temp").style.display = pts > 0 ? "none" : "flex";
+  document.getElementById("nd-humid").style.display = pts > 0 ? "none" : "flex";
 
   let meta = "collecting…";
   if (pts > 1) {
