@@ -226,6 +226,26 @@ function setWindowButtons() {
   document.getElementById("chart-h-title").textContent = `Humidity / ${selectedHours}hr window`;
 }
 
+function getHistoryLimit() {
+  return Math.min(20000, Math.max(600, selectedHours * 180));
+}
+
+function formatChartLabel(ts) {
+  if (selectedHours >= 24) {
+    return ts.toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  return ts.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function updateTile(valId, subId, value, unit, low, high, type) {
   if (Number.isNaN(value)) return;
 
@@ -332,12 +352,7 @@ function addOrReplacePoint(point) {
 }
 
 function updateCharts() {
-  const labels = history.map(r =>
-    r.ts.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit"
-    })
-  );
+  const labels = history.map(r => formatChartLabel(r.ts));
 
   chartTemp.data.labels = labels;
   chartTemp.data.datasets[0].data = history.map(r => r.temperature);
@@ -356,9 +371,9 @@ function updateCharts() {
     const first = history[0].ts;
     const last = history[history.length - 1].ts;
     meta =
-      `${first.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` +
+      `${formatChartLabel(first)}` +
       ` → ` +
-      `${last.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` +
+      `${formatChartLabel(last)}` +
       ` · ${pts} pts`;
   }
 
@@ -405,7 +420,8 @@ async function fetchHistory() {
   setStatus("init", "LOADING", `${selectedHours}hr history`);
 
   const minutes = selectedHours * 60;
-  const url = `${apiBase}/history?device_id=${encodeURIComponent(deviceId)}&minutes=${minutes}&mode=time`;
+  const limit = getHistoryLimit();
+  const url = `${apiBase}/history?device_id=${encodeURIComponent(deviceId)}&minutes=${minutes}&limit=${limit}&mode=time`;
   const data = await fetchJson(url);
 
   const rows = Array.isArray(data.history) ? data.history : [];

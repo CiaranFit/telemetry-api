@@ -2,11 +2,79 @@ import logging
 import time
 from pathlib import Path
 from flask import request, jsonify, send_from_directory, redirect
+from urllib.parse import urlencode
+from urllib.request import urlopen
 from .storage import save_metric, get_latest, list_devices, get_history, get_latest_points
+from .config import Config
 
 logger = logging.getLogger("telemetry")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
+
+
+def fetch_weather_today():
+    if not Config.WEATHER_LAT or not Config.WEATHER_LON:
+        raise ValueError("WEATHER_LAT and WEATHER_LON must be configured")
+
+    params = urlencode({
+        "latitude": Config.WEATHER_LAT,
+        "longitude": Config.WEATHER_LON,
+        "timezone": Config.WEATHER_TIMEZONE,
+        "current": "temperature_2m,weather_code",
+        "daily": "temperature_2m_min,temperature_2m_max,precipitation_probability_max,weather_code",
+        "forecast_days": 1,
+    })
+    url = f"https://api.open-meteo.com/v1/forecast?{params}"
+
+    with urlopen(url, timeout=5) as response:
+        payload = response.read().decode("utf-8")
+
+    import json
+    data = json.loads(payload)
+
+    daily = data.get("daily", {})
+    current = data.get("current", {})
+    codes = daily.get("weather_code") or [current.get("weather_code")]
+    code = codes[0] if codes else None
+
+    weather_labels = {
+        0: "Clear",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Depositing rime fog",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        56: "Light freezing drizzle",
+        57: "Dense freezing drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        66: "Light freezing rain",
+        67: "Heavy freezing rain",
+        71: "Slight snow",
+        73: "Moderate snow",
+        75: "Heavy snow",
+        77: "Snow grains",
+        80: "Slight rain showers",
+        81: "Moderate rain showers",
+        82: "Violent rain showers",
+        85: "Slight snow showers",
+        86: "Heavy snow showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm hail",
+        99: "Heavy thunderstorm hail",
+    }
+
+    return {
+        "temperature": current.get("temperature_2m"),
+        "temp_min": (daily.get("temperature_2m_min") or [None])[0],
+        "temp_max": (daily.get("temperature_2m_max") or [None])[0],
+        "precip_chance": (daily.get("precipitation_probability_max") or [None])[0],
+        "condition": weather_labels.get(code, "Unknown"),
+    }
 
 
 def register_routes(app):
@@ -162,6 +230,16 @@ def register_routes(app):
     @app.route("/devices", methods=["GET"])
     def devices():
         return jsonify({"devices": list_devices()}), 200
+
+    @app.route("/weather/today", methods=["GET"])
+    def weather_today():
+        try:
+            return jsonify(fetch_weather_today()), 200
+        except ValueError as err:
+            return {"error": str(err)}, 503
+        except Exception:
+            logger.exception("weather_fetch_failed")
+            return {"error": "weather unavailable"}, 502
 
     @app.route("/history", methods=["GET"])
     def history():
