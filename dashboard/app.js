@@ -1,5 +1,7 @@
 const POLL_MS = 30000;
-const API_BASE = "http://192.168.1.7:8000";
+const API_BASE = window.location.origin.startsWith("http")
+  ? window.location.origin
+  : "http://localhost:8000";
 
 const history = [];
 let selectedHours = Number(localStorage.getItem("telemetry-window-hours")) || 4;

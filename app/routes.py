@@ -1,12 +1,23 @@
 import logging
 import time
-from flask import request, jsonify
+from pathlib import Path
+from flask import request, jsonify, send_from_directory
 from .storage import save_metric, get_latest, list_devices, get_history, get_latest_points
 
 logger = logging.getLogger("telemetry")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
 
 
 def register_routes(app):
+
+    @app.route("/", methods=["GET"])
+    def dashboard_index():
+        return send_from_directory(DASHBOARD_DIR, "index.html")
+
+    @app.route("/dashboard/<path:filename>", methods=["GET"])
+    def dashboard_assets(filename):
+        return send_from_directory(DASHBOARD_DIR, filename)
 
     @app.route("/health", methods=["GET"])
     def health():
