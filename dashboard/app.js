@@ -22,7 +22,9 @@ const deviceSelect = document.getElementById("device-select");
 const statusDot = document.getElementById("status-dot");
 const statusText = document.getElementById("status-text");
 const lastSeen = document.getElementById("last-seen");
-const windowButtons = Array.from(document.querySelectorAll(".window-btn"));
+const windowButtons = Array.from(
+  document.querySelectorAll(".window-btn[data-hours]")
+);
 
 let pollHandle = null;
 let dashboardMode = "live";
@@ -54,13 +56,11 @@ function createChartOptions() {
       padding: 10
     },
     zoom: {
-        limits: {
-          x: {
-            min: "original",
-            max: "original",
-            minRange: MIN_ZOOM_RANGE_MS
-          }
-        },
+      limits: {
+        x: {
+          minRange: MIN_ZOOM_RANGE_MS
+        }
+      },
       pan: {
         onPan({ chart }) {
           syncChartZoom(chart);
@@ -189,28 +189,14 @@ function getEffectiveXRange() {
     : getDefaultXRange();
 }
 
+
 function applyXRange(range) {
   if (!isValidXRange(range)) return;
 
   syncingZoom = true;
+
   try {
-    const defaultRange = getDefaultXRange();
-    const minRange = Math.min(
-      MIN_ZOOM_RANGE_MS,
-      defaultRange.max - defaultRange.min
-    );
-
     for (const chart of [chartTemp, chartHumid]) {
-      const zoomOptions = chart.options?.plugins?.zoom;
-      if (zoomOptions) {
-        zoomOptions.limits = zoomOptions.limits || {};
-        zoomOptions.limits.x = {
-          min: defaultRange.min,
-          max: defaultRange.max,
-          minRange
-        };
-      }
-
       if (typeof chart.zoomScale === "function") {
         chart.zoomScale("x", range, "none");
       } else if (chart.options?.scales?.x) {
@@ -223,6 +209,7 @@ function applyXRange(range) {
     syncingZoom = false;
   }
 }
+
 
 function syncChartZoom(source) {
   if (syncingZoom || !source.scales?.x) return;
