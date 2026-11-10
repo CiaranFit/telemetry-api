@@ -114,5 +114,36 @@ class HistoryAPITests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_daily_aggregation_keeps_timestamps_inside_requested_range(self):
+        start = 1_800_000_123
+        end = start + 30 * 86400
+        readings = [
+            ("Test_01", 20.0, 40.0, start),
+            ("Test_01", 21.0, 41.0, start + 86400),
+            ("Test_01", 22.0, 42.0, end - 1),
+        ]
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany("""
+                INSERT INTO readings
+                (device_id, temperature, humidity, ts)
+                VALUES (?, ?, ?, ?)
+            """, readings)
+
+        response = self.client.get("/api/history", query_string={
+            "device_id": "Test_01",
+            "start": start,
+            "end": end,
+            "bucket": 86400,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        points = response.get_json()["history"]
+        timestamps = [point["ts"] for point in points]
+
+        self.assertTrue(timestamps)
+        self.assertTrue(all(start <= ts < end for ts in timestamps))
+        self.assertEqual(timestamps[0], start)
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,9 @@ let apiBase = savedApiBase || "";
 
 const history = [];
 const validWindows = [4, 8, 24];
+const HISTORY_WINDOW_DAYS = 7;
+const HISTORY_WINDOW_OFFSET_DAYS = HISTORY_WINDOW_DAYS - 1;
+const MIN_ZOOM_RANGE_MS = 15 * 60 * 1000;
 
 const storedHours = Number(
   localStorage.getItem("telemetry-window-hours")
@@ -51,6 +54,13 @@ function createChartOptions() {
       padding: 10
     },
     zoom: {
+        limits: {
+          x: {
+            min: "original",
+            max: "original",
+            minRange: MIN_ZOOM_RANGE_MS
+          }
+        },
       pan: {
         onPan({ chart }) {
           syncChartZoom(chart);
@@ -184,7 +194,23 @@ function applyXRange(range) {
 
   syncingZoom = true;
   try {
+    const defaultRange = getDefaultXRange();
+    const minRange = Math.min(
+      MIN_ZOOM_RANGE_MS,
+      defaultRange.max - defaultRange.min
+    );
+
     for (const chart of [chartTemp, chartHumid]) {
+      const zoomOptions = chart.options?.plugins?.zoom;
+      if (zoomOptions) {
+        zoomOptions.limits = zoomOptions.limits || {};
+        zoomOptions.limits.x = {
+          min: defaultRange.min,
+          max: defaultRange.max,
+          minRange
+        };
+      }
+
       if (typeof chart.zoomScale === "function") {
         chart.zoomScale("x", range, "none");
       } else if (chart.options?.scales?.x) {
@@ -201,10 +227,27 @@ function applyXRange(range) {
 function syncChartZoom(source) {
   if (syncingZoom || !source.scales?.x) return;
 
-  sharedXRange = {
+  const nextRange = {
     min: source.scales.x.min,
     max: source.scales.x.max
   };
+
+  if (!isValidXRange(nextRange)) return;
+
+  const hasVisiblePoint = source.data?.datasets?.some(dataset =>
+    dataset.data?.some(point => {
+      const timestamp = typeof point === "object" ? point.x : NaN;
+      return Number.isFinite(timestamp) &&
+        timestamp >= nextRange.min && timestamp <= nextRange.max;
+    })
+  );
+
+  if (source.data?.datasets?.length && !hasVisiblePoint) {
+    applyXRange(getEffectiveXRange());
+    return;
+  }
+
+  sharedXRange = nextRange;
   applyXRange(sharedXRange);
 }
 
@@ -706,6 +749,28 @@ function chooseBucket(seconds) {
   ) ?? 86400;
 }
 
+function shiftLocalCalendarDate(value, days) {
+  const date = localDayStart(value);
+  date.setDate(date.getDate() + days);
+  return dateInputValue(date);
+}
+
+function syncHistoricalDateRange(changedInput) {
+  if (!changedInput.value) return;
+
+  if (changedInput === historyStart) {
+    historyEnd.value = shiftLocalCalendarDate(
+      historyStart.value,
+      HISTORY_WINDOW_OFFSET_DAYS
+    );
+  } else if (changedInput === historyEnd) {
+    historyStart.value = shiftLocalCalendarDate(
+      historyEnd.value,
+      -HISTORY_WINDOW_OFFSET_DAYS
+    );
+  }
+}
+
 function renderHistoricalCharts(points, start, end) {
   historicalXRange = {
     min: start * 1000,
@@ -910,8 +975,8 @@ historyButton.addEventListener("click", () => {
 historyLoad.addEventListener("click", loadHistoricalData);
 
 const today = new Date();
-const yesterday = new Date(today);
-yesterday.setDate(yesterday.getDate() - 1);
+const initialStart = new Date(today);
+initialStart.setDate(initialStart.getDate() - HISTORY_WINDOW_OFFSET_DAYS);
 
 function dateInputValue(date) {
   const year = date.getFullYear();
@@ -920,8 +985,16 @@ function dateInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
-historyStart.value = dateInputValue(yesterday);
+historyStart.value = dateInputValue(initialStart);
 historyEnd.value = dateInputValue(today);
+
+historyStart.addEventListener("change", () => {
+  syncHistoricalDateRange(historyStart);
+});
+
+historyEnd.addEventListener("change", () => {
+  syncHistoricalDateRange(historyEnd);
+});
 
 
 
