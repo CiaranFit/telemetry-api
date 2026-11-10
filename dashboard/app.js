@@ -359,7 +359,14 @@ function setWindowButtons() {
 }
 
 function getHistoryLimit() {
-  return Math.min(5000, Math.max(MAX_HISTORY_POINTS, selectedHours * 180));
+  // Pico W reports approximately every 15 seconds.
+  // Allow sufficient samples for the complete selected window.
+  const samplesPerHour = 3600 / 15;
+
+  return Math.min(
+    20000,
+    Math.ceil(selectedHours * samplesPerHour * 1.25)
+  );
 }
 
 function formatChartLabel(ts) {
