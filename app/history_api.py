@@ -38,7 +38,7 @@ def historical_readings():
     with db() as conn:
         rows = conn.execute("""
             SELECT
-                (ts / ?) * ? AS ts,
+                ((ts - ?) / ?) * ? + ? AS ts,
                 AVG(temperature) AS temperature,
                 AVG(humidity) AS humidity,
                 MIN(temperature) AS temp_min,
@@ -50,11 +50,12 @@ def historical_readings():
             WHERE device_id = ?
               AND ts >= ?
               AND ts < ?
-            GROUP BY (ts / ?)
+            GROUP BY ((ts - ?) / ?) * ? + ?
             ORDER BY ts
         """, (
-            bucket, bucket,
-            device_id, start, end, bucket
+            start, bucket, bucket, start,
+            device_id, start, end,
+            start, bucket, bucket, start
         )).fetchall()
 
     return jsonify({

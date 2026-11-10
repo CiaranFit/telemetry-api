@@ -143,7 +143,39 @@ class HistoryAPITests(unittest.TestCase):
 
         self.assertTrue(timestamps)
         self.assertTrue(all(start <= ts < end for ts in timestamps))
-        self.assertEqual(timestamps[0], start)
+        self.assertEqual(timestamps, [start, start + 86400, start + 29 * 86400])
+        self.assertEqual([point["samples"] for point in points], [1, 1, 1])
+
+    def test_short_interval_buckets_are_anchored_to_unaligned_start(self):
+        start = 1_800_000_017
+        end = start + 125
+        readings = [
+            ("Test_01", 20.0, 40.0, start),
+            ("Test_01", 22.0, 42.0, start + 59),
+            ("Test_01", 24.0, 44.0, start + 60),
+            ("Test_01", 26.0, 46.0, end),
+        ]
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany("""
+                INSERT INTO readings
+                (device_id, temperature, humidity, ts)
+                VALUES (?, ?, ?, ?)
+            """, readings)
+
+        response = self.client.get("/api/history", query_string={
+            "device_id": "Test_01",
+            "start": start,
+            "end": end,
+            "bucket": 60,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        points = response.get_json()["history"]
+
+        self.assertEqual([point["ts"] for point in points], [start, start + 60])
+        self.assertEqual([point["samples"] for point in points], [2, 1])
+        self.assertTrue(all(start <= point["ts"] < end for point in points))
 
 if __name__ == "__main__":
     unittest.main()
