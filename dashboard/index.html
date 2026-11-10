@@ -9,9 +9,13 @@
   <title>Sensor Dashboard</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260325b" />
+  <link rel="stylesheet" href="styles.css?v=20261110a" />
 </head>
 <body>
 
@@ -34,6 +38,43 @@
       <button class="window-btn" data-hours="8">8H</button>
       <button class="window-btn" data-hours="24">24H</button>
     </div>
+  </div>
+  
+  <div class="history-controls">
+  <div class="history-mode">
+    <button id="mode-live" class="mode-btn active">
+      LIVE
+    </button>
+    <button id="mode-history" class="mode-btn">
+      HISTORY
+    </button>
+  </div>
+
+  <div id="history-picker" class="history-picker" hidden>
+    <label for="history-start">FROM</label>
+    <input type="date" id="history-start">
+
+    <label for="history-end">TO</label>
+    <input type="date" id="history-end">
+
+    <button id="history-load">LOAD HISTORY</button>
+  </div>
+
+  <div id="history-stats" class="history-stats" hidden>
+    <div>
+      <span>AVG TEMPERATURE</span>
+      <strong id="history-temp-avg">--</strong>
+    </div>
+    <div>
+      <span>MIN / MAX</span>
+      <strong id="history-temp-range">--</strong>
+    </div>
+    <div>
+      <span>AVG HUMIDITY</span>
+      <strong id="history-humid-avg">--</strong>
+    </div>
+  </div>
+
   </div>
 
   <div class="grid row-3" style="margin-bottom:16px;">
@@ -67,7 +108,9 @@
       <div class="chart-header">
         <span class="chart-title" id="chart-t-title">Temperature / 4hr window</span>
         <span class="chart-meta" id="chart-t-meta">building history…</span>
+        <button id="reset-temp-zoom" class="window-btn">RESET ZOOM</button>
       </div>
+
       <div class="chart-wrap">
         <canvas id="chart-temp"></canvas>
         <div class="no-data" id="nd-temp">ACCUMULATING DATA…</div>
@@ -80,6 +123,7 @@
       <div class="chart-header">
         <span class="chart-title" id="chart-h-title">Humidity / 4hr window</span>
         <span class="chart-meta" id="chart-h-meta">building history…</span>
+        <button id="reset-humid-zoom" class="window-btn">RESET ZOOM</button>
       </div>
       <div class="chart-wrap">
         <canvas id="chart-humid"></canvas>
@@ -88,6 +132,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260325b"></script>
+  <script src="app.js?v=20261110a"></script>
 </body>
 </html>

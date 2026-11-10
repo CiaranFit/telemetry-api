@@ -4,7 +4,15 @@ const savedApiBase = localStorage.getItem("telemetry-api-base") || "";
 let apiBase = savedApiBase || "";
 
 const history = [];
-let selectedHours = Number(localStorage.getItem("telemetry-window-hours")) || 4;
+const validWindows = [4, 8, 24];
+
+const storedHours = Number(
+  localStorage.getItem("telemetry-window-hours")
+);
+
+let selectedHours = validWindows.includes(storedHours)
+  ? storedHours
+  : 4;
 let deviceId = localStorage.getItem("telemetry-device-id") || "";
 
 const deviceSelect = document.getElementById("device-select");
@@ -14,8 +22,19 @@ const lastSeen = document.getElementById("last-seen");
 const windowButtons = Array.from(document.querySelectorAll(".window-btn"));
 
 let pollHandle = null;
+let dashboardMode = "live";
+let historyRequestId = 0;
 
-const chartDefaults = {
+const liveButton = document.getElementById("mode-live");
+const historyButton = document.getElementById("mode-history");
+const historyPicker = document.getElementById("history-picker");
+const historyStats = document.getElementById("history-stats");
+const historyLoad = document.getElementById("history-load");
+const historyStart = document.getElementById("history-start");
+const historyEnd = document.getElementById("history-end");
+
+function createChartOptions() {
+  return {
   responsive: true,
   maintainAspectRatio: false,
   animation: { duration: 300 },
@@ -30,18 +49,59 @@ const chartDefaults = {
       titleFont: { family: "'Space Mono', monospace", size: 10 },
       bodyFont: { family: "'Space Mono', monospace", size: 11 },
       padding: 10
+    },
+    zoom: {
+      pan: {
+        onPan({ chart }) {
+          syncChartZoom(chart);
+        },
+        enabled: true,
+        mode: "x",
+        modifierKey: "shift"
+      },
+      zoom: {
+        onZoom({ chart }) {
+          syncChartZoom(chart);
+        },
+        wheel: {
+          enabled: true,
+          modifierKey: "ctrl"
+        },
+        pinch: {
+          enabled: true
+        },
+        drag: {
+          enabled: true,
+          backgroundColor: "rgba(61, 214, 140, 0.08)",
+          borderColor: "#3dd68c",
+          borderWidth: 1
+        },
+        mode: "x"
+      }
     }
   },
   scales: {
     x: {
-      grid: { color: "#1a1e26", drawBorder: false },
+      type: "time",
+      time: {
+        tooltipFormat: "dd MMM yyyy, HH:mm:ss",
+        displayFormats: {
+          minute: "HH:mm",
+          hour: "HH:mm",
+          day: "dd MMM"
+        }
+      },
+      grid: {
+        color: "#1a1e26"
+      },
       ticks: {
         color: "#4a5568",
-        font: { family: "'Space Mono', monospace", size: 9 },
-        maxTicksLimit: 6,
+        maxTicksLimit: 8,
         maxRotation: 0
       },
-      border: { display: false }
+      border: {
+        display: false
+      }
     },
     y: {
       grid: { color: "#1a1e26", drawBorder: false },
@@ -56,7 +116,8 @@ const chartDefaults = {
     point: { radius: 0, hoverRadius: 4 },
     line: { tension: 0.35 }
   }
-};
+  };
+}
 
 function makeChart(canvasId, color) {
   const canvas = document.getElementById(canvasId);
@@ -84,12 +145,82 @@ function makeChart(canvasId, color) {
         fill: true
       }]
     },
-    options: chartDefaults
+    options: createChartOptions()
   });
 }
 
 const chartTemp = makeChart("chart-temp", "#e8834a");
 const chartHumid = makeChart("chart-humid", "#4ab8e8");
+
+let syncingZoom = false;
+let sharedXRange = null;
+let historicalXRange = null;
+
+function isValidXRange(range) {
+  return range && Number.isFinite(range.min) && Number.isFinite(range.max)
+    && range.min < range.max;
+}
+
+function getDefaultXRange() {
+  if (dashboardMode === "history" && isValidXRange(historicalXRange)) {
+    return { ...historicalXRange };
+  }
+
+  const end = Date.now();
+  return {
+    min: end - selectedHours * 3600000,
+    max: end
+  };
+}
+
+function getEffectiveXRange() {
+  return isValidXRange(sharedXRange)
+    ? { ...sharedXRange }
+    : getDefaultXRange();
+}
+
+function applyXRange(range) {
+  if (!isValidXRange(range)) return;
+
+  syncingZoom = true;
+  try {
+    for (const chart of [chartTemp, chartHumid]) {
+      if (typeof chart.zoomScale === "function") {
+        chart.zoomScale("x", range, "none");
+      } else if (chart.options?.scales?.x) {
+        chart.options.scales.x.min = range.min;
+        chart.options.scales.x.max = range.max;
+        chart.update("none");
+      }
+    }
+  } finally {
+    syncingZoom = false;
+  }
+}
+
+function syncChartZoom(source) {
+  if (syncingZoom || !source.scales?.x) return;
+
+  sharedXRange = {
+    min: source.scales.x.min,
+    max: source.scales.x.max
+  };
+  applyXRange(sharedXRange);
+}
+
+function resetChartZoomState() {
+  sharedXRange = null;
+
+  for (const chart of [chartTemp, chartHumid]) {
+    if (typeof chart.resetZoom === "function") {
+      chart.resetZoom("none");
+    }
+    if (chart.options?.scales?.x) {
+      delete chart.options.scales.x.min;
+      delete chart.options.scales.x.max;
+    }
+  }
+}
 
 function parseTimestamp(ts) {
   if (typeof ts === "number") return new Date(ts * 1000);
@@ -391,15 +522,22 @@ function updateCharts() {
   const tempValues = chartPoints.map(r => r.temperature);
   const humidValues = chartPoints.map(r => r.humidity);
 
-  chartTemp.data.labels = labels;
-  chartTemp.data.datasets[0].data = tempValues;
+  chartTemp.data.labels = [];
+  chartTemp.data.datasets[0].data = chartPoints.map(p => ({
+    x: p.ts.getTime(),
+    y: p.temperature
+  }));
   setYAxisRange(chartTemp, tempValues, 2);
   chartTemp.update();
 
-  chartHumid.data.labels = labels;
-  chartHumid.data.datasets[0].data = humidValues;
+  chartHumid.data.labels = [];
+  chartHumid.data.datasets[0].data = chartPoints.map(p => ({
+    x: p.ts.getTime(),
+    y: p.humidity
+  }));
   setYAxisRange(chartHumid, humidValues, 5);
   chartHumid.update();
+  applyXRange(getEffectiveXRange());
 
   const pts = history.length;
   document.getElementById("nd-temp").style.display = pts > 0 ? "none" : "flex";
@@ -453,6 +591,8 @@ async function fetchDevices() {
 }
 
 async function fetchHistory() {
+  if (dashboardMode !== "live") return;
+
   if (!deviceId) {
     setStatus("err", "ERROR", "No device selected");
     return;
@@ -493,6 +633,7 @@ async function fetchHistory() {
 }
 
 async function fetchLatest() {
+  if (dashboardMode !== "live") return;
   if (!deviceId) return;
 
   try {
@@ -531,6 +672,252 @@ async function fetchWeatherToday() {
   }
 }
 
+
+function localDayStart(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Select valid dates");
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    throw new Error("Invalid calendar date");
+  }
+
+  return date;
+}
+
+function chooseBucket(seconds) {
+  const buckets = [60, 300, 900, 3600, 86400];
+  return buckets.find(bucket =>
+    Math.ceil(seconds / bucket) <= 480
+  ) ?? 86400;
+}
+
+function renderHistoricalCharts(points, start, end) {
+  historicalXRange = {
+    min: start * 1000,
+    max: end * 1000
+  };
+
+  const temperatures = points.map(p => p.temperature);
+  const humidities = points.map(p => p.humidity);
+
+  const labels = points.map(p =>
+    new Date(p.ts * 1000).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+  );
+
+  chartTemp.data.labels = [];
+  chartTemp.data.datasets[0].data = points.map(p => ({
+    x: p.ts * 1000,
+    y: p.temperature
+  }));
+
+  chartHumid.data.labels = [];
+  chartHumid.data.datasets[0].data = points.map(p => ({
+    x: p.ts * 1000,
+    y: p.humidity
+  }));
+
+  setYAxisRange(chartTemp, temperatures, 2);
+  chartTemp.update();
+
+  setYAxisRange(chartHumid, humidities, 5);
+  chartHumid.update();
+  applyXRange(getEffectiveXRange());
+
+  document.getElementById("nd-temp").style.display =
+    points.length ? "none" : "flex";
+  document.getElementById("nd-humid").style.display =
+    points.length ? "none" : "flex";
+
+  const meta = `${points.length} intervals`;
+
+  document.getElementById("chart-t-meta").textContent = meta;
+  document.getElementById("chart-h-meta").textContent = meta;
+
+  document.getElementById("chart-t-title").textContent =
+    "Temperature / historical";
+
+  document.getElementById("chart-h-title").textContent =
+    "Humidity / historical";
+
+  const totalSamples = points.reduce(
+    (sum, p) => sum + p.samples, 0
+  );
+
+  const weightedAverage = key =>
+    totalSamples
+      ? points.reduce(
+          (sum, p) => sum + p[key] * p.samples, 0
+        ) / totalSamples
+      : null;
+
+  const avgTemp = weightedAverage("temperature");
+  const avgHumid = weightedAverage("humidity");
+
+  const minTemp = points.length
+    ? Math.min(...points.map(p => p.temp_min))
+    : null;
+
+  const maxTemp = points.length
+    ? Math.max(...points.map(p => p.temp_max))
+    : null;
+
+  document.getElementById("history-temp-avg").textContent =
+    avgTemp === null ? "--" : `${avgTemp.toFixed(1)}°C`;
+
+  document.getElementById("history-temp-range").textContent =
+    minTemp === null
+      ? "--"
+      : `${minTemp.toFixed(1)}–${maxTemp.toFixed(1)}°C`;
+
+  document.getElementById("history-humid-avg").textContent =
+    avgHumid === null ? "--" : `${avgHumid.toFixed(1)}%`;
+}
+
+function resetAllZoom() {
+  resetChartZoomState();
+  for (const chart of [chartTemp, chartHumid]) {
+    chart.update("none");
+  }
+  applyXRange(getDefaultXRange());
+}
+
+async function loadHistoricalData() {
+  if (!deviceId) {
+    setStatus("err", "ERROR", "No device selected");
+    return;
+  }
+
+  const requestId = ++historyRequestId;
+  resetChartZoomState();
+  historicalXRange = null;
+  historyLoad.disabled = true;
+
+  try {
+    const startDate = localDayStart(historyStart.value);
+    const endDate = localDayStart(historyEnd.value);
+
+    // End date is inclusive for the user.
+    const exclusiveEnd = new Date(endDate);
+    exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+
+    const start = Math.floor(startDate.getTime() / 1000);
+    const end = Math.floor(exclusiveEnd.getTime() / 1000);
+    const seconds = end - start;
+
+    if (seconds <= 0 || seconds > 90 * 86400) {
+      throw new Error("Select a range of 1–90 days");
+    }
+
+    const bucket = chooseBucket(seconds);
+
+    setStatus("init", "LOADING", "historical data");
+
+    const params = new URLSearchParams({
+      device_id: deviceId,
+      start: String(start),
+      end: String(end),
+      bucket: String(bucket)
+    });
+
+    const data = await fetchJson(
+      `${apiBase}/api/history?${params}`
+    );
+
+    if (
+      dashboardMode !== "history" ||
+      requestId !== historyRequestId
+    ) return;
+
+    renderHistoricalCharts(data.history, start, end);
+    setStatus(
+      "ok",
+      "HISTORY",
+      `${data.history.length} intervals loaded`
+    );
+
+  } catch (err) {
+    if (
+      dashboardMode === "history" &&
+      requestId === historyRequestId
+    ) {
+      setStatus("err", "ERROR", err.message);
+    }
+  } finally {
+    historyLoad.disabled = false;
+  }
+}
+
+function setDashboardMode(mode) {
+  dashboardMode = mode;
+  historyRequestId++;
+  historicalXRange = null;
+  resetChartZoomState();
+
+  const historical = mode === "history";
+
+  liveButton.classList.toggle("active", !historical);
+  historyButton.classList.toggle("active", historical);
+
+  historyPicker.hidden = !historical;
+  historyStats.hidden = !historical;
+
+  for (const btn of windowButtons) {
+    btn.disabled = historical;
+  }
+
+  if (historical) {
+    loadHistoricalData();
+  } else {
+    setWindowButtons();
+    fetchHistory().then(() => fetchLatest()).catch(err => {
+      setStatus("err", "ERROR", err.message);
+    });
+  }
+}
+
+liveButton.addEventListener("click", () => {
+  if (dashboardMode !== "live") {
+    setDashboardMode("live");
+  }
+});
+
+historyButton.addEventListener("click", () => {
+  if (dashboardMode !== "history") {
+    setDashboardMode("history");
+  }
+});
+
+historyLoad.addEventListener("click", loadHistoricalData);
+
+const today = new Date();
+const yesterday = new Date(today);
+yesterday.setDate(yesterday.getDate() - 1);
+
+function dateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+historyStart.value = dateInputValue(yesterday);
+historyEnd.value = dateInputValue(today);
+
+
+
 async function initialiseDashboard() {
   try {
     if (pollHandle) {
@@ -546,7 +933,10 @@ async function initialiseDashboard() {
     await fetchLatest();
     await fetchWeatherToday();
 
-    pollHandle = setInterval(fetchLatest, POLL_MS);
+    pollHandle = setInterval(() => {
+      if (dashboardMode === "live") fetchLatest();
+    }, POLL_MS);
+
   } catch (err) {
     console.error("Initialisation failed:", err);
     setDeviceSelectState("API unavailable");
@@ -558,6 +948,8 @@ async function initialiseDashboard() {
 deviceSelect.addEventListener("change", async (e) => {
   deviceId = e.target.value;
   localStorage.setItem("telemetry-device-id", deviceId);
+  historicalXRange = null;
+  resetChartZoomState();
   history.length = 0;
   updateCharts();
   await initialiseDashboard();
@@ -565,8 +957,14 @@ deviceSelect.addEventListener("change", async (e) => {
 
 for (const btn of windowButtons) {
   btn.addEventListener("click", async () => {
-    selectedHours = Number(btn.dataset.hours);
+    const hours = Number(btn.dataset.hours);
+
+    if (!validWindows.includes(hours)) return;
+    if (dashboardMode !== "live") return;
+
+    selectedHours = hours;
     localStorage.setItem("telemetry-window-hours", String(selectedHours));
+    resetChartZoomState();
     history.length = 0;
     setWindowButtons();
     updateCharts();
@@ -575,5 +973,13 @@ for (const btn of windowButtons) {
   });
 }
 
+// Reset graph zoom buttons
+document.getElementById("reset-temp-zoom")
+  ?.addEventListener("click", resetAllZoom);
+
+document.getElementById("reset-humid-zoom")
+  ?.addEventListener("click", resetAllZoom);
+
+// Start the dashboard
 setDeviceSelectState("Loading devices...");
 initialiseDashboard();
