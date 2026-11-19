@@ -12,7 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261119rooms1" />
+  <link rel="stylesheet" href="styles.css?v=20261119floorplan2" />
 </head>
 <body>
   <header>
@@ -157,13 +157,17 @@
       <div>
         <div class="page-kicker">HOME CLIMATE</div>
         <h1>Temperature floorplan</h1>
-        <p>Colours relative to 20°C · Select a room for its history</p>
+        <p id="floorplan-description">Colours relative to 20°C · Select a room for its history</p>
       </div>
     </div>
     <div class="tile tile-floorplan">
       <div class="map-header">
-        <strong>ROOM TEMPERATURES</strong>
+        <strong id="floorplan-heading">ROOM TEMPERATURES</strong>
         <span id="floorplan-status">Checking sensors…</span>
+      </div>
+      <div class="floorplan-metric-toggle" role="group" aria-label="Colour floorplan by">
+        <button type="button" class="floorplan-metric-btn active" data-metric="temperature" aria-pressed="true">Temperature</button>
+        <button type="button" class="floorplan-metric-btn" data-metric="humidity" aria-pressed="false">Humidity</button>
       </div>
       <svg id="home-floorplan" viewBox="0 0 630 580" role="group" aria-label="Interactive floorplan of the six rooms">
         <g class="map-room" data-page="hallway" role="button" tabindex="0" aria-label="Open hallway">
@@ -197,15 +201,15 @@
           <text class="room-reading" data-room-temp="spare-room" x="513" y="337">—</text>
         </g>
       </svg>
-      <div class="map-legend" aria-label="Temperature colour scale, 16 to 24 degrees Celsius">
-        <span>16°C · Cool</span>
-        <div class="temperature-scale"></div>
-        <span>20°C · Ideal</span>
-        <span>24°C · Warm</span>
+      <div id="floorplan-legend" class="map-legend" aria-label="Temperature colour scale, 16 to 24 degrees Celsius">
+        <span id="legend-low">16°C · Cool</span>
+        <div id="floorplan-scale" class="temperature-scale"></div>
+        <span id="legend-mid">20°C · Ideal</span>
+        <span id="legend-high">24°C · Warm</span>
       </div>
       <p class="map-note">Grey rooms have no readings or a sensor that hasn't reported recently. The floorplan is schematic, not to scale.</p>
     </div>
   </section>
-  <script src="app.js?v=20261119rooms1"></script>
+  <script src="app.js?v=20261119floorplan2"></script>
 </body>
 </html>

@@ -596,3 +596,37 @@ header {
 }
 
 #status-dot.stale { background:var(--accent-t); box-shadow:0 0 8px var(--accent-t); }
+
+/* Floorplan: instantly switch between temperature and relative humidity. */
+.floorplan-metric-toggle {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:4px;
+  margin:17px 0 4px;
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:6px;
+}
+.floorplan-metric-btn {
+  border:1px solid transparent;
+  border-radius:4px;
+  padding:8px 14px;
+  color:var(--text);
+  background:transparent;
+  font: .65rem var(--font-mono);
+  cursor:pointer;
+  transition:background .18s, color .18s, border-color .18s;
+}
+.floorplan-metric-btn:hover, .floorplan-metric-btn:focus-visible {
+  color:var(--green);
+  border-color:var(--green);
+}
+.floorplan-metric-btn.active {
+  background:rgba(61,214,140,.08);
+  border-color:var(--green);
+  color:var(--green);
+}
+.temperature-scale.humidity-scale {
+  background:linear-gradient(90deg,#235b92,#35779b,#2a8168,#a56b39,#a94747);
+}
