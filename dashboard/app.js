@@ -1030,6 +1030,9 @@ async function loadSelectedPage(token) {
     return;
   }
 
+  // Weather belongs to the Overview, independently of sensor availability.
+  if (currentPage === "overview") fetchWeatherToday();
+
   if (!knownDevices.has(deviceId)) {
     setControlsEnabled(false);
     clearRoomView("Sensor not installed");
@@ -1044,7 +1047,6 @@ async function loadSelectedPage(token) {
     await fetchHistory();
     await fetchLatest();
   }
-  if (currentPage === "overview") await fetchWeatherToday();
 }
 
 async function navigateTo(page, { push = false } = {}) {
