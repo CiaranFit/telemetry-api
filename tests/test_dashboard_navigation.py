@@ -41,6 +41,26 @@ class DashboardContractTests(unittest.TestCase):
             self.assertIn("nd-" + field, parser.ids)
         self.assertTrue({"weather-hours", "sensor-content", "floorplan-content"}.issubset(parser.ids))
 
+    def test_floorplan_metric_toggle_and_legends(self):
+        contents = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "dashboard" / "app.js").read_text(encoding="utf-8")
+
+        parser = Elements()
+        parser.feed(contents)
+        for element_id in (
+            "floorplan-heading", "floorplan-description", "floorplan-legend",
+            "floorplan-scale", "legend-low", "legend-mid", "legend-high",
+        ):
+            self.assertIn(element_id, parser.ids)
+
+        self.assertIn('data-metric="temperature"', contents)
+        self.assertIn('data-metric="humidity"', contents)
+        self.assertIn('aria-pressed="true"', contents)
+        self.assertIn('aria-pressed="false"', contents)
+        self.assertIn("function humidityColour(", script)
+        self.assertIn("function renderFloorplan(", script)
+        self.assertIn('localStorage.setItem("telemetry-floorplan-metric", metric)', script)
+
     def test_legacy_device_dropdown_removed(self):
         contents = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "dashboard" / "app.js").read_text(encoding="utf-8")
