@@ -83,10 +83,14 @@ Each room page has temperature, relative humidity, eCO₂ and TVOC live readings
 with synchronized 4/8/24-hour charts and the existing historical date picker.
 The Overview additionally shows seven hourly weather forecast entries from
 Open-Meteo via `/weather/today`. The floorplan uses the same `/latest`
-endpoint as the charts and colours active rooms on a 16–24°C scale around
-a nominal 20°C ideal. Rooms without readings or with readings older than
-two minutes are grey; rooms not registered in `/devices` show
-"Sensor not installed" on their detail page.
+endpoint as the charts. A Temperature / Humidity toggle switches the live
+labels, colours and legend immediately using cached readings without additional
+API requests. Temperature uses a blue → green (20°C) → red scale across
+16–24°C. Relative humidity uses a blue → green (50% RH) → red scale
+across 30–70% RH. The selected mode persists in the browser. Rooms without
+the selected measurement or with readings older than two minutes stay grey;
+rooms not registered in `/devices` show "Sensor not installed" on their
+detail page.
 
 SGP30 eCO₂ is **not** a direct atmospheric CO₂ measurement. Its values
 and the TVOC readings are indicative, with a startup baseline settling period.
