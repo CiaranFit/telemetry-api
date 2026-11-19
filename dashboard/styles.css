@@ -594,3 +594,5 @@ header {
   .temperature-scale { flex-basis:100%; order:3; }
   .map-legend span:last-of-type { order:4; }
 }
+
+#status-dot.stale { background:var(--accent-t); box-shadow:0 0 8px var(--accent-t); }
