@@ -61,3 +61,47 @@ authentication or a network firewall. LAN access alone does not prevent local
 clients or server-side requests from reading these endpoints. Restrict network
 access to trusted clients; future control actions require authentication,
 authorization, and appropriate CSRF/origin protections before being exposed.
+
+
+## Dashboard pages
+
+The Flask-hosted dashboard at `/dashboard/` uses fixed room navigation instead
+of a device selector. The default `Overview` is always the `Livingroom` Pico.
+Links can be bookmarked (for example, `/dashboard/?room=bedroom` or
+`/dashboard/?room=floorplan`).
+
+| Page | Expected Pico `device_id` |
+|---|---|
+| Overview (living room) | `Livingroom` |
+| Bedroom | `Bedroom` |
+| Kitchen | `Kitchen` |
+| Hallway | `Hallway` |
+| Bathroom | `Bathroom` |
+| Spare room | `Spare_Room` |
+
+Each room page has temperature, relative humidity, eCO₂ and TVOC live readings,
+with synchronized 4/8/24-hour charts and the existing historical date picker.
+The Overview additionally shows seven hourly weather forecast entries from
+Open-Meteo via `/weather/today`. The floorplan uses the same `/latest`
+endpoint as the charts and colours active rooms on a 16–24°C scale around
+a nominal 20°C ideal. Rooms without readings or with readings older than
+two minutes are grey; rooms not registered in `/devices` show
+"Sensor not installed" on their detail page.
+
+SGP30 eCO₂ is **not** a direct atmospheric CO₂ measurement. Its values
+and the TVOC readings are indicative, with a startup baseline settling period.
+
+No new database schema or sensor firmware change is required for these UI
+pages beyond the existing optional `eco2` and `tvoc` fields. If a sensor
+uses a different device ID, update the `ROOM_PAGES` mapping in
+`dashboard/app.js`; the dashboard expects the exact identifiers above.
+
+After pulling the updated project on the Pi, run:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+sudo systemctl restart telemetry-api
+```
+
+The dashboard CSS and JS references include a new asset version to help
+browsers reload the updated code after deployment.
