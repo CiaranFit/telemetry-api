@@ -77,6 +77,15 @@ def fetch_weather_today():
     }
 
 
+def optional_air_quality_value(value):
+    """Accept nullable SGP30 readings represented as unsigned 16-bit integers."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 65535:
+        raise ValueError("air quality readings must be integers from 0 to 65535")
+    return value
+
+
 def register_routes(app):
 
     @app.route("/", methods=["GET"])
@@ -138,6 +147,8 @@ def register_routes(app):
                 "device_id": str(data["device_id"]).strip(),
                 "temperature": float(data["temperature"]),
                 "humidity": float(data["humidity"]),
+                "eco2": optional_air_quality_value(data.get("eco2")),
+                "tvoc": optional_air_quality_value(data.get("tvoc")),
                 "ts": int(time.time()),
             }
         except (TypeError, ValueError):
