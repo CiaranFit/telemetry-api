@@ -22,7 +22,8 @@ def fetch_weather_today():
         "timezone": Config.WEATHER_TIMEZONE,
         "current": "temperature_2m,weather_code",
         "daily": "temperature_2m_min,temperature_2m_max,precipitation_probability_max,weather_code",
-        "forecast_days": 1,
+        "hourly": "temperature_2m,precipitation_probability,weather_code",
+        "forecast_days": 2,
     })
     url = f"https://api.open-meteo.com/v1/forecast?{params}"
 
@@ -68,7 +69,31 @@ def fetch_weather_today():
         99: "Heavy thunderstorm hail",
     }
 
+    # Open-Meteo hourly timestamps are in the configured local time zone.
+    # Compare local date/hour strings to select the current and next six hours.
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    now_hour = datetime.now(ZoneInfo(Config.WEATHER_TIMEZONE)).strftime("%Y-%m-%dT%H:00")
+    hourly = data.get("hourly", {})
+    hours = []
+    for index, hour in enumerate(hourly.get("time") or []):
+        if hour < now_hour:
+            continue
+        temperatures = hourly.get("temperature_2m") or []
+        rain = hourly.get("precipitation_probability") or []
+        codes = hourly.get("weather_code") or []
+        hours.append({
+            "time": hour,
+            "temperature": temperatures[index] if index < len(temperatures) else None,
+            "precip_chance": rain[index] if index < len(rain) else None,
+            "weather_code": codes[index] if index < len(codes) else None,
+        })
+        if len(hours) == 7:
+            break
+
     return {
+        "hours": hours,
         "temperature": current.get("temperature_2m"),
         "temp_min": (daily.get("temperature_2m_min") or [None])[0],
         "temp_max": (daily.get("temperature_2m_max") or [None])[0],
