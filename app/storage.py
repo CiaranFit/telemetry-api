@@ -43,9 +43,18 @@ def init_db():
                 device_id TEXT NOT NULL,
                 temperature REAL NOT NULL,
                 humidity REAL NOT NULL,
-                ts INTEGER NOT NULL
+                ts INTEGER NOT NULL,
+                eco2 INTEGER,
+                tvoc INTEGER
             )
         """)
+
+        # Upgrade databases created before the air-quality fields existed.
+        # Nullable fields leave old temperature/humidity rows untouched.
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(readings)")}
+        for column in ("eco2", "tvoc"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE readings ADD COLUMN {column} INTEGER")
 
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_readings_device_ts
@@ -56,20 +65,22 @@ def init_db():
 def save_metric(data: dict):
     with db() as conn:
         conn.execute("""
-            INSERT INTO readings (device_id, temperature, humidity, ts)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO readings (device_id, temperature, humidity, ts, eco2, tvoc)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             data["device_id"],
             data["temperature"],
             data["humidity"],
             data["ts"],
+            data.get("eco2"),
+            data.get("tvoc"),
         ))
 
 
 def get_latest(device_id: str):
     with db() as conn:
         row = conn.execute("""
-            SELECT device_id, temperature, humidity, ts
+            SELECT device_id, temperature, humidity, ts, eco2, tvoc
             FROM readings
             WHERE device_id = ?
             ORDER BY ts DESC
@@ -84,6 +95,8 @@ def get_latest(device_id: str):
         "temperature": row["temperature"],
         "humidity": row["humidity"],
         "ts": row["ts"],
+        "eco2": row["eco2"],
+        "tvoc": row["tvoc"],
     }
 
 
@@ -104,9 +117,9 @@ def get_history(device_id: str, since_ts: int, limit: int = 5000):
     """
     with db() as conn:
         rows = conn.execute("""
-            SELECT device_id, temperature, humidity, ts
+            SELECT device_id, temperature, humidity, ts, eco2, tvoc
             FROM (
-                SELECT device_id, temperature, humidity, ts
+                SELECT device_id, temperature, humidity, ts, eco2, tvoc
                 FROM readings
                 WHERE device_id = ?
                   AND ts >= ?
@@ -122,6 +135,8 @@ def get_history(device_id: str, since_ts: int, limit: int = 5000):
             "temperature": row["temperature"],
             "humidity": row["humidity"],
             "ts": row["ts"],
+            "eco2": row["eco2"],
+            "tvoc": row["tvoc"],
         }
         for row in rows
     ]
@@ -133,7 +148,7 @@ def get_latest_points(device_id: str, limit: int = 2000):
     """
     with db() as conn:
         rows = conn.execute("""
-            SELECT device_id, temperature, humidity, ts
+            SELECT device_id, temperature, humidity, ts, eco2, tvoc
             FROM readings
             WHERE device_id = ?
             ORDER BY ts DESC
@@ -148,6 +163,8 @@ def get_latest_points(device_id: str, limit: int = 2000):
             "temperature": row["temperature"],
             "humidity": row["humidity"],
             "ts": row["ts"],
+            "eco2": row["eco2"],
+            "tvoc": row["tvoc"],
         }
         for row in rows
     ]
