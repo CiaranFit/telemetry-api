@@ -895,7 +895,10 @@ async function loadHistoricalData() {
       setStatus("err", "ERROR", err.message);
     }
   } finally {
-    historyLoad.disabled = false;
+    // Don't re-enable a stale page's controls after navigating elsewhere.
+    if (token === navigationToken && dashboardMode === "history") {
+      historyLoad.disabled = false;
+    }
   }
 }
 
