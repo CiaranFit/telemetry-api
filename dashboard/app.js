@@ -28,6 +28,12 @@ const ROOM_PAGES = {
 };
 const ROOM_KEYS = Object.keys(ROOM_PAGES).filter(key => key !== "floorplan");
 const STALE_MS = 120000;
+const storedFloorplanMetric = localStorage.getItem("telemetry-floorplan-metric");
+let floorplanMetric = storedFloorplanMetric === "humidity" ? "humidity" : "temperature";
+const floorplanReadings = new Map();
+const floorplanMetricButtons = Array.from(
+  document.querySelectorAll(".floorplan-metric-btn")
+);
 const queryPage = new URLSearchParams(window.location.search).get("room");
 let currentPage = Object.prototype.hasOwnProperty.call(ROOM_PAGES, queryPage) ? queryPage : "overview";
 let deviceId = ROOM_PAGES[currentPage].deviceId;
@@ -963,20 +969,33 @@ historyEnd.addEventListener("change", () => {
 
 
 
+function interpolateFloorplanColour(value, stops) {
+  const clamped = Math.max(stops[0][0], Math.min(stops[stops.length - 1][0], value));
+  const index = Math.max(0, stops.findIndex((stop, i) =>
+    i < stops.length - 1 && clamped <= stops[i + 1][0]
+  ));
+  const a = stops[Math.min(index, stops.length - 2)];
+  const b = stops[Math.min(index + 1, stops.length - 1)];
+  const fraction = (clamped - a[0]) / (b[0] - a[0]);
+  const rgb = a[1].map((channel, i) =>
+    Math.round(channel + (b[1][i] - channel) * fraction)
+  );
+  return `rgb(${rgb.join(",")})`;
+}
+
 function temperatureColour(temp) {
-  const stops = [
+  return interpolateFloorplanColour(temp, [
     [16, [35, 91, 146]], [18, [53, 119, 155]],
     [20, [42, 129, 104]], [22, [165, 107, 57]], [24, [169, 71, 71]]
-  ];
-  const clamped = Math.max(16, Math.min(24, temp));
-  const i = Math.min(3, stops.findIndex((stop, idx) =>
-    idx < stops.length - 1 && clamped <= stops[idx + 1][0]
-  ));
-  const a = stops[Math.max(0, i)];
-  const b = stops[Math.max(0, i) + 1];
-  const weight = (clamped - a[0]) / (b[0] - a[0]);
-  const components = a[1].map((c, j) => Math.round(c + (b[1][j] - c) * weight));
-  return `rgb(${components.join(",")})`;
+  ]);
+}
+
+function humidityColour(humidity) {
+  // Blue: dry. Green: around 50% RH. Red: humid.
+  return interpolateFloorplanColour(humidity, [
+    [30, [35, 91, 146]], [40, [53, 119, 155]],
+    [50, [42, 129, 104]], [60, [165, 107, 57]], [70, [169, 71, 71]]
+  ]);
 }
 
 function updateFloorplanRoom(key, point) {
@@ -984,14 +1003,70 @@ function updateFloorplanRoom(key, point) {
   if (!group) return false;
   const shape = group.querySelector(".room-shape");
   const reading = group.querySelector(".room-reading");
-  const valid = point && Number.isFinite(Number(point.temperature))
-    && Date.now() - Number(point.ts) * 1000 <= STALE_MS;
-  shape.style.fill = valid ? temperatureColour(Number(point.temperature)) : "#283038";
-  reading.textContent = valid ? `${Number(point.temperature).toFixed(1)}°C` : "—";
-  group.setAttribute("aria-label", valid
-    ? `Open ${ROOM_PAGES[key].label}, ${Number(point.temperature).toFixed(1)} degrees Celsius`
-    : `Open ${ROOM_PAGES[key].label}, sensor unavailable or stale`);
+  const value = point?.[floorplanMetric];
+  const timestamp = point?.ts;
+  const elapsedMs = Date.now() - timestamp * 1000;
+  const valid = typeof value === "number" && Number.isFinite(value)
+    && typeof timestamp === "number" && Number.isFinite(timestamp)
+    && elapsedMs >= -30000 && elapsedMs <= STALE_MS;
+
+  shape.style.fill = valid
+    ? (floorplanMetric === "temperature" ? temperatureColour(value) : humidityColour(value))
+    : "#283038";
+  reading.textContent = valid
+    ? (floorplanMetric === "temperature" ? `${value.toFixed(1)}°C` : `${value.toFixed(1)}%`)
+    : "—";
+  const label = valid
+    ? (floorplanMetric === "temperature"
+      ? `${value.toFixed(1)} degrees Celsius`
+      : `${value.toFixed(1)} percent relative humidity`)
+    : "reading unavailable or stale";
+  group.setAttribute("aria-label", `Open ${ROOM_PAGES[key].label}, ${label}`);
   return valid;
+}
+
+function renderFloorplan() {
+  const isHumidity = floorplanMetric === "humidity";
+  for (const button of floorplanMetricButtons) {
+    const active = button.dataset.metric === floorplanMetric;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  document.getElementById("floorplan-heading").textContent =
+    isHumidity ? "ROOM HUMIDITY" : "ROOM TEMPERATURES";
+  document.getElementById("floorplan-description").textContent =
+    isHumidity
+      ? "Relative humidity · Around 40–60% RH is a useful indoor reference · Select a room for its history"
+      : "Colours relative to 20°C · Select a room for its history";
+  const legend = document.getElementById("floorplan-legend");
+  legend.setAttribute("aria-label", isHumidity
+    ? "Relative humidity colour scale, 30 to 70 percent"
+    : "Temperature colour scale, 16 to 24 degrees Celsius");
+  document.getElementById("legend-low").textContent =
+    isHumidity ? "30% · Dry" : "16°C · Cool";
+  document.getElementById("legend-mid").textContent =
+    isHumidity ? "50% · Comfortable" : "20°C · Ideal";
+  document.getElementById("legend-high").textContent =
+    isHumidity ? "70% · Humid" : "24°C · Warm";
+  document.getElementById("floorplan-scale").classList.toggle("humidity-scale", isHumidity);
+
+  let active = 0;
+  for (const key of ROOM_KEYS) {
+    if (updateFloorplanRoom(key, floorplanReadings.get(key))) active++;
+  }
+  const message = `${active} of ${ROOM_KEYS.length} rooms reporting`;
+  document.getElementById("floorplan-status").textContent = message;
+  if (currentPage === "floorplan") setStatus("ok", "FLOORPLAN", message);
+}
+
+for (const button of floorplanMetricButtons) {
+  button.addEventListener("click", () => {
+    const metric = button.dataset.metric;
+    if (metric !== "temperature" && metric !== "humidity") return;
+    floorplanMetric = metric;
+    localStorage.setItem("telemetry-floorplan-metric", metric);
+    renderFloorplan(); // Recolour immediately using cached readings, no network request.
+  });
 }
 
 async function refreshFloorplan() {
@@ -1008,13 +1083,8 @@ async function refreshFloorplan() {
     }
   }));
   if (token !== navigationToken || currentPage !== "floorplan") return;
-  let active = 0;
-  for (const [key, value] of responses) {
-    if (updateFloorplanRoom(key, value)) active++;
-  }
-  const message = `${active} of ${ROOM_KEYS.length} rooms reporting`;
-  document.getElementById("floorplan-status").textContent = message;
-  setStatus("ok", "FLOORPLAN", message);
+  for (const [key, point] of responses) floorplanReadings.set(key, point);
+  renderFloorplan();
 }
 
 function clearRoomView(message) {
@@ -1063,6 +1133,7 @@ async function navigateTo(page, { push = false } = {}) {
   document.getElementById("sensor-content").hidden = page === "floorplan";
   document.getElementById("floorplan-content").hidden = page !== "floorplan";
   document.getElementById("weather-section").hidden = page !== "overview";
+  if (page === "floorplan") renderFloorplan();
   document.getElementById("page-title").textContent =
     page === "overview" ? "Living room · Overview" : ROOM_PAGES[page].label;
   document.getElementById("page-subtitle").textContent =
