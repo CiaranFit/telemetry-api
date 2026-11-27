@@ -65,16 +65,18 @@ authorization, and appropriate CSRF/origin protections before being exposed.
 
 ## Dashboard pages
 
-The Flask-hosted dashboard at `/dashboard/` uses fixed room navigation instead
-of a device selector. The default `Overview` is always the `Livingroom` Pico.
+The Flask-hosted dashboard at `/dashboard/` uses data-driven room navigation instead
+of a device selector. The default `Overview` uses the `Livingroom` sensor for
+the combined open-plan living room and kitchen. Overview and Floorplan are
+always available; other room tabs appear after their first stored reading and
+remain available for history if a sensor goes offline.
 Links can be bookmarked (for example, `/dashboard/?room=bedroom` or
 `/dashboard/?room=floorplan`).
 
 | Page | Expected Pico `device_id` |
 |---|---|
-| Overview (living room) | `Livingroom` |
+| Overview (living room / kitchen) | `Livingroom` |
 | Bedroom | `Bedroom` |
-| Kitchen | `Kitchen` |
 | Hallway | `Hallway` |
 | Bathroom | `Bathroom` |
 | Spare room | `Spare_Room` |
@@ -90,7 +92,8 @@ API requests. Temperature uses a blue → green (20°C) → red scale across
 across 30–70% RH. The selected mode persists in the browser. Rooms without
 the selected measurement or with readings older than two minutes stay grey;
 rooms not registered in `/devices` show "Sensor not installed" on their
-detail page.
+detail page. Navigation refreshes with each 30-second poll. The old `?room=kitchen`
+URL opens the Overview; the floorplan reports five climate zones.
 
 SGP30 eCO₂ is **not** a direct atmospheric CO₂ measurement. Its values
 and the TVOC readings are indicative, with a startup baseline settling period.
