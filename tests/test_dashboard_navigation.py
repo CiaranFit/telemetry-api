@@ -5,7 +5,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-ROOM_PAGES = {"overview", "bedroom", "kitchen", "hallway", "bathroom", "spare-room", "floorplan"}
+ROOM_PAGES = {"overview", "bedroom", "hallway", "bathroom", "spare-room", "floorplan"}
 
 
 class Elements(HTMLParser):
@@ -14,6 +14,7 @@ class Elements(HTMLParser):
         self.ids = set()
         self.links = set()
         self.map_rooms = set()
+        self.hidden_links = set()
 
     def handle_starttag(self, tag, attrs):
         props = dict(attrs)
@@ -21,6 +22,8 @@ class Elements(HTMLParser):
             self.ids.add(props["id"])
         if tag == "a" and props.get("data-page"):
             self.links.add(props["data-page"])
+            if "hidden" in props:
+                self.hidden_links.add(props["data-page"])
         if tag == "g" and props.get("data-page"):
             self.map_rooms.add(props["data-page"])
 
@@ -31,6 +34,21 @@ class DashboardContractTests(unittest.TestCase):
         parser.feed((ROOT / "dashboard" / "index.html").read_text(encoding="utf-8"))
         self.assertEqual(parser.links, ROOM_PAGES)
         self.assertEqual(parser.map_rooms, ROOM_PAGES - {"floorplan"})
+        self.assertEqual(parser.hidden_links, ROOM_PAGES - {"overview", "floorplan"})
+
+    def test_open_plan_and_dynamic_navigation(self):
+        html = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "dashboard" / "app.js").read_text(encoding="utf-8")
+        css = (ROOT / "dashboard" / "styles.css").read_text(encoding="utf-8")
+        self.assertNotIn('data-page="kitchen"', html)
+        self.assertIn('M52 234 H398 V524 H226 V407 H52 Z', html)
+        self.assertIn('Living room / Kitchen', html)
+        self.assertIn('deviceId: "Livingroom"', script)
+        self.assertIn('if (page === "kitchen") return "overview";', script)
+        self.assertIn('function updateRoomNavigation()', script)
+        self.assertIn('!knownDevices.has(ROOM_PAGES[page].deviceId)', script)
+        self.assertIn('updateRoomNavigation();', script)
+        self.assertIn('.room-nav a[hidden]', css)
 
     def test_instantaneous_tiles_and_four_graphs(self):
         parser = Elements()
