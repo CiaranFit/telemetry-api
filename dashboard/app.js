@@ -16,11 +16,10 @@ const storedHours = Number(
 let selectedHours = validWindows.includes(storedHours)
   ? storedHours
   : 4;
-// The Overview is always Livingroom; other pages use fixed device IDs.
+// Overview represents the open-plan living room and kitchen (one sensor).
 const ROOM_PAGES = {
-  "overview": { label: "Living room", deviceId: "Livingroom" },
+  "overview": { label: "Living room / Kitchen", deviceId: "Livingroom" },
   "bedroom": { label: "Bedroom", deviceId: "Bedroom" },
-  "kitchen": { label: "Kitchen", deviceId: "Kitchen" },
   "hallway": { label: "Hallway", deviceId: "Hallway" },
   "bathroom": { label: "Bathroom", deviceId: "Bathroom" },
   "spare-room": { label: "Spare room", deviceId: "Spare_Room" },
@@ -35,11 +34,15 @@ const floorplanMetricButtons = Array.from(
   document.querySelectorAll(".floorplan-metric-btn")
 );
 const queryPage = new URLSearchParams(window.location.search).get("room");
-let currentPage = Object.prototype.hasOwnProperty.call(ROOM_PAGES, queryPage) ? queryPage : "overview";
+function normalisePage(page) {
+  // Preserve old kitchen bookmarks as links to the open-plan overview.
+  if (page === "kitchen") return "overview";
+  return Object.prototype.hasOwnProperty.call(ROOM_PAGES, page) ? page : "overview";
+}
+let currentPage = normalisePage(queryPage);
 let deviceId = ROOM_PAGES[currentPage].deviceId;
 let knownDevices = new Set();
 let navigationToken = 0;
-let pollTick = 0;
 let polling = false;
 const navLinks = Array.from(document.querySelectorAll("#room-nav a[data-page]"));
 const statusDot = document.getElementById("status-dot");
@@ -674,9 +677,20 @@ function updateCharts() {
   renderChartSeries(points, meta);
 }
 
+function updateRoomNavigation() {
+  for (const link of navLinks) {
+    const page = link.dataset.page;
+    // Keep the weather overview and floorplan available without sensors.
+    // /devices lists IDs with stored readings, not just currently online nodes.
+    link.hidden = page !== "overview" && page !== "floorplan"
+      && !knownDevices.has(ROOM_PAGES[page].deviceId);
+  }
+}
+
 async function fetchDevices() {
   const data = await fetchJson(`${apiBase}/devices`);
   knownDevices = new Set(Array.isArray(data.devices) ? data.devices : []);
+  updateRoomNavigation();
   return knownDevices;
 }
 
@@ -1054,7 +1068,7 @@ function renderFloorplan() {
   for (const key of ROOM_KEYS) {
     if (updateFloorplanRoom(key, floorplanReadings.get(key))) active++;
   }
-  const message = `${active} of ${ROOM_KEYS.length} rooms reporting`;
+  const message = `${active} of ${ROOM_KEYS.length} zones reporting`;
   document.getElementById("floorplan-status").textContent = message;
   if (currentPage === "floorplan") setStatus("ok", "FLOORPLAN", message);
 }
@@ -1123,7 +1137,7 @@ async function loadSelectedPage(token) {
 }
 
 async function navigateTo(page, { push = false } = {}) {
-  if (!Object.prototype.hasOwnProperty.call(ROOM_PAGES, page)) page = "overview";
+  page = normalisePage(page);
   const token = ++navigationToken;
   historyRequestId++;
   currentPage = page;
@@ -1135,7 +1149,7 @@ async function navigateTo(page, { push = false } = {}) {
   document.getElementById("weather-section").hidden = page !== "overview";
   if (page === "floorplan") renderFloorplan();
   document.getElementById("page-title").textContent =
-    page === "overview" ? "Living room · Overview" : ROOM_PAGES[page].label;
+    page === "overview" ? "Living room / Kitchen · Overview" : ROOM_PAGES[page].label;
   document.getElementById("page-subtitle").textContent =
     page === "overview" ? "Primary sensor · Livingroom" : `Room sensor · ${deviceId || ""}`;
   for (const link of navLinks) {
@@ -1201,10 +1215,8 @@ async function initialiseDashboard() {
       const token = navigationToken;
       try {
         const hadDevice = knownDevices.has(deviceId);
-        if (currentPage === "floorplan" || !hadDevice || ++pollTick % 4 === 0) {
-          await fetchDevices();
-          if (token !== navigationToken) return;
-        }
+        await fetchDevices();
+        if (token !== navigationToken) return;
         if (currentPage === "floorplan") {
           await refreshFloorplan();
         } else if (!hadDevice && knownDevices.has(deviceId)) {

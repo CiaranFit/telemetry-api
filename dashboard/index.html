@@ -12,7 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261119floorplan2" />
+  <link rel="stylesheet" href="styles.css?v=20261127openplan1" />
 </head>
 <body>
   <header>
@@ -26,11 +26,10 @@
 
   <nav id="room-nav" class="room-nav" aria-label="Home monitoring pages">
     <a href="?room=overview" data-page="overview">Overview</a>
-    <a href="?room=bedroom" data-page="bedroom">Bedroom</a>
-    <a href="?room=kitchen" data-page="kitchen">Kitchen</a>
-    <a href="?room=hallway" data-page="hallway">Hallway</a>
-    <a href="?room=bathroom" data-page="bathroom">Bathroom</a>
-    <a href="?room=spare-room" data-page="spare-room">Spare room</a>
+    <a href="?room=bedroom" data-page="bedroom" hidden>Bedroom</a>
+    <a href="?room=hallway" data-page="hallway" hidden>Hallway</a>
+    <a href="?room=bathroom" data-page="bathroom" hidden>Bathroom</a>
+    <a href="?room=spare-room" data-page="spare-room" hidden>Spare room</a>
     <a href="?room=floorplan" data-page="floorplan">Floorplan</a>
   </nav>
 
@@ -38,7 +37,7 @@
     <div class="page-heading">
       <div>
         <div class="page-kicker">SENSOR MONITORING</div>
-        <h1 id="page-title">Living room · Overview</h1>
+        <h1 id="page-title">Living room / Kitchen · Overview</h1>
         <p id="page-subtitle">Primary sensor · Livingroom</p>
       </div>
     </div>
@@ -169,7 +168,7 @@
         <button type="button" class="floorplan-metric-btn active" data-metric="temperature" aria-pressed="true">Temperature</button>
         <button type="button" class="floorplan-metric-btn" data-metric="humidity" aria-pressed="false">Humidity</button>
       </div>
-      <svg id="home-floorplan" viewBox="0 0 630 580" role="group" aria-label="Interactive floorplan of the six rooms">
+      <svg id="home-floorplan" viewBox="0 0 630 580" role="group" aria-label="Interactive floorplan of the five climate zones">
         <g class="map-room" data-page="hallway" role="button" tabindex="0" aria-label="Open hallway">
           <path class="room-shape" d="M340 60 H571 V292 H398 V234 H340 Z" />
           <text class="room-label" x="440" y="206">Hallway</text>
@@ -185,15 +184,10 @@
           <text class="room-label" x="427" y="110">Bathroom</text>
           <text class="room-reading" data-room-temp="bathroom" x="427" y="137">—</text>
         </g>
-        <g class="map-room" data-page="kitchen" role="button" tabindex="0" aria-label="Open kitchen">
-          <rect class="room-shape" x="52" y="234" width="174" height="173" />
-          <text class="room-label" x="139" y="308">Kitchen</text>
-          <text class="room-reading" data-room-temp="kitchen" x="139" y="338">—</text>
-        </g>
-        <g class="map-room" data-page="overview" role="button" tabindex="0" aria-label="Open living room">
-          <rect class="room-shape" x="226" y="234" width="172" height="290" />
-          <text class="room-label" x="312" y="365">Living room</text>
-          <text class="room-reading" data-room-temp="overview" x="312" y="397">—</text>
+        <g class="map-room" data-page="overview" role="button" tabindex="0" aria-label="Open living room and kitchen">
+          <path class="room-shape" d="M52 234 H398 V524 H226 V407 H52 Z" />
+          <text class="room-label" x="225" y="320">Living room / Kitchen</text>
+          <text class="room-reading" data-room-temp="overview" x="225" y="350">—</text>
         </g>
         <g class="map-room" data-page="spare-room" role="button" tabindex="0" aria-label="Open spare room">
           <rect class="room-shape" x="456" y="234" width="115" height="173" />
@@ -210,6 +204,6 @@
       <p class="map-note">Grey rooms have no readings or a sensor that hasn't reported recently. The floorplan is schematic, not to scale.</p>
     </div>
   </section>
-  <script src="app.js?v=20261119floorplan2"></script>
+  <script src="app.js?v=20261127openplan1"></script>
 </body>
 </html>
