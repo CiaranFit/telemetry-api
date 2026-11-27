@@ -539,7 +539,7 @@ header {
 }
 .room-nav a:hover, .room-nav a:focus-visible { color:var(--green); border-color:var(--green); }
 .room-nav a.active { color:var(--green); border-color:var(--green); background:rgba(61,214,140,.08); }
-.page-section[hidden], .overview-only[hidden] { display:none !important; }
+.room-nav a[hidden], .page-section[hidden], .overview-only[hidden] { display:none !important; }
 .page-heading { display:flex; justify-content:space-between; margin-bottom:20px; }
 .page-kicker { font: .6rem var(--font-mono); letter-spacing:.18em; color:var(--muted); margin-bottom:6px; }
 .page-heading h1 { font: 500 1.35rem var(--font-body); letter-spacing:.01em; }
